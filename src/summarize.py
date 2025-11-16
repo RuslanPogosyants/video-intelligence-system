@@ -67,6 +67,55 @@ class SegmentSummarizer:
         # Перевод модели в режим eval
         self.model.eval()
 
+    @staticmethod
+    def preprocess_text(text: str) -> str:
+        """
+        Предобработка текста: очистка от мусора в разговорной речи
+
+        Args:
+            text: исходный текст из транскрипции
+
+        Returns:
+            Очищенный текст
+        """
+        import re
+
+        # 1. Удаление звуков-заполнителей (filler sounds)
+        filler_patterns = [
+            r'\b(?:ммм|эээ|ааа|эмм|хмм|угу|ага)\b',  # Основные звуки
+            r'\b(?:ну|вот|как бы|типа|короче|значит)\b',  # Слова-паразиты (частые)
+            r'\b(?:понимаете|знаете|смотрите|слушайте)\b',  # Обращения без смысла
+        ]
+
+        for pattern in filler_patterns:
+            text = re.sub(pattern, ' ', text, flags=re.IGNORECASE)
+
+        # 2. Удаление повторяющихся слов (это это это -> это)
+        text = re.sub(r'\b(\w+)( \1\b)+', r'\1', text)
+
+        # 3. Удаление множественных знаков препинания (...... -> .)
+        text = re.sub(r'\.{2,}', '.', text)
+        text = re.sub(r',{2,}', ',', text)
+        text = re.sub(r'\?{2,}', '?', text)
+        text = re.sub(r'!{2,}', '!', text)
+
+        # 4. Удаление неполных предложений (заканчивающихся на "...", но оставляем если это середина)
+        text = re.sub(r'\.{3,}\s*$', '.', text)
+
+        # 5. Очистка множественных пробелов
+        text = re.sub(r'\s+', ' ', text)
+
+        # 6. Удаление пробелов перед знаками препинания
+        text = re.sub(r'\s+([.,!?;:])', r'\1', text)
+
+        # 7. Добавление пробела после знаков препинания (если его нет)
+        text = re.sub(r'([.,!?;:])(\w)', r'\1 \2', text)
+
+        # 8. Удаление пробелов в начале и конце
+        text = text.strip()
+
+        return text
+
     def summarize_text(
             self,
             text: str,
@@ -136,16 +185,19 @@ class SegmentSummarizer:
         for segment in iterator:
             text = segment["text"]
 
+            # Предобработка текста (очистка от мусора)
+            text_cleaned = self.preprocess_text(text)
+
             # Пропускаем слишком короткие тексты
-            if len(text) < min_text_length:
-                summary = text  # Используем исходный текст
+            if len(text_cleaned) < min_text_length:
+                summary = text_cleaned  # Используем очищенный текст
                 print(f"[WARN] Segment {segment['id']} too short, skipping summarization")
             else:
                 try:
-                    summary = self.summarize_text(text)
+                    summary = self.summarize_text(text_cleaned)
                 except Exception as e:
                     print(f"[✗] Error summarizing segment {segment['id']}: {e}")
-                    summary = text[:200] + "..."  # Fallback: первые 200 символов
+                    summary = text_cleaned[:200] + "..."  # Fallback: первые 200 символов
 
             # Добавляем суммаризацию к сегменту
             segment_with_summary = segment.copy()

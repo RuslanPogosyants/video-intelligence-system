@@ -473,7 +473,7 @@ class ReportExporter:
             return None
 
     def export_all(self, artifacts_dir: Path) -> Dict[str, Path]:
-        """Экспорт во все форматы"""
+        """Экспорт в HTML (PDF отключен)"""
         print(f"\n{'=' * 60}")
         print("[INFO] Starting report generation")
         print(f"{'=' * 60}\n")
@@ -484,10 +484,9 @@ class ReportExporter:
         html_path = self.export_html(artifacts_dir)
         results["html"] = html_path
 
-        # PDF
-        pdf_path = self.export_pdf(html_path)
-        if pdf_path:
-            results["pdf"] = pdf_path
+        # PDF отключен - пользователь может сохранить через браузер
+        print("\n[INFO] PDF generation is disabled (to avoid WeasyPrint dependency issues)")
+        print("[INFO] You can save as PDF using your browser: File > Print > Save as PDF")
 
         print(f"\n[✓] Report generation complete!")
         return results
@@ -532,16 +531,14 @@ def main():
 
         checkpoint["stage"] = "export_complete"
         checkpoint["files"]["report_html"] = str(results.get("html", ""))
-        if "pdf" in results:
-            checkpoint["files"]["report_pdf"] = str(results["pdf"])
+        # PDF generation disabled
 
         with open(checkpoint_path, 'w', encoding='utf-8') as f:
             json.dump(checkpoint, f, ensure_ascii=False, indent=2)
 
     print(f"\n[SUCCESS] Export complete!")
     print(f"[INFO] HTML: {results.get('html', 'N/A')}")
-    if "pdf" in results:
-        print(f"[INFO] PDF: {results['pdf']}")
+    print(f"[INFO] PDF: Disabled (use browser to save as PDF)")
 
 
 if __name__ == "__main__":
