@@ -2,15 +2,24 @@
 """
 Веб-интерфейс для Video Intelligence System
 """
-from flask import Flask, render_template, jsonify, send_from_directory
+from flask import Flask, render_template, jsonify, send_from_directory, request, redirect, url_for
 from pathlib import Path
 import json
 from datetime import datetime
 from typing import Dict, List, Optional
+import os
+import subprocess
+import threading
+import time
 
 app = Flask(__name__)
 app.config['ARTIFACTS_DIR'] = Path('artifacts')
+app.config['UPLOAD_FOLDER'] = Path('artifacts')
+app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB max
 app.config['JSON_AS_ASCII'] = False
+
+# Словарь для отслеживания активных процессов обработки
+processing_tasks = {}
 
 
 def get_all_sessions() -> List[Dict]:
@@ -190,6 +199,271 @@ def api_session(session_id):
 def serve_static(filename):
     """Отдача статических файлов"""
     return send_from_directory('static', filename)
+
+
+def get_available_audio_files() -> List[Dict]:
+    """Получить список доступных аудио файлов"""
+    artifacts_dir = app.config['ARTIFACTS_DIR']
+
+    if not artifacts_dir.exists():
+        artifacts_dir.mkdir(parents=True, exist_ok=True)
+        return []
+
+    audio_files = []
+
+    # Ищем wav, mp3, mp4 файлы
+    for ext in ['*.wav', '*.mp3', '*.mp4', '*.m4a']:
+        for file_path in artifacts_dir.rglob(ext):
+            # Пропускаем файлы внутри обработанных папок
+            if 'video_' in str(file_path.parent):
+                continue
+
+            stat = file_path.stat()
+            audio_files.append({
+                'name': file_path.name,
+                'path': str(file_path.relative_to(artifacts_dir)),
+                'full_path': str(file_path),
+                'size': stat.st_size,
+                'size_mb': round(stat.st_size / (1024 * 1024), 2),
+                'modified': stat.st_mtime,
+                'ext': file_path.suffix
+            })
+
+    # Сортируем по дате изменения (новые первые)
+    audio_files.sort(key=lambda x: x['modified'], reverse=True)
+
+    return audio_files
+
+
+@app.route('/process')
+def process_page():
+    """Страница обработки новых файлов"""
+    audio_files = get_available_audio_files()
+    return render_template('process.html', audio_files=audio_files)
+
+
+@app.route('/api/audio-files')
+def api_audio_files():
+    """API: список доступных аудио файлов"""
+    files = get_available_audio_files()
+    return jsonify(files)
+
+
+@app.route('/upload', methods=['POST'])
+def upload_file():
+    """Загрузка нового файла"""
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+
+    file = request.files['file']
+
+    if file.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
+
+    # Проверяем расширение
+    allowed_extensions = {'.wav', '.mp3', '.mp4', '.m4a', '.avi', '.mkv'}
+    file_ext = Path(file.filename).suffix.lower()
+
+    if file_ext not in allowed_extensions:
+        return jsonify({'error': f'File type not allowed. Allowed: {", ".join(allowed_extensions)}'}), 400
+
+    # Сохраняем файл
+    filename = file.filename
+    file_path = app.config['UPLOAD_FOLDER'] / filename
+
+    # Если файл уже существует, добавляем timestamp
+    if file_path.exists():
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        name_without_ext = file_path.stem
+        filename = f"{name_without_ext}_{timestamp}{file_ext}"
+        file_path = app.config['UPLOAD_FOLDER'] / filename
+
+    file.save(str(file_path))
+
+    return jsonify({
+        'success': True,
+        'filename': filename,
+        'path': str(file_path)
+    })
+
+
+def run_processing(file_path: str, task_id: str, options: Dict):
+    """Запуск обработки в отдельном потоке"""
+    try:
+        processing_tasks[task_id]['status'] = 'running'
+        processing_tasks[task_id]['stage'] = 'Подготовка...'
+        processing_tasks[task_id]['progress'] = 5
+
+        # Формируем команду
+        cmd = [
+            'python', '-m', 'src.cli', 'process-all',
+            file_path,
+            '--language', options.get('language', 'ru'),
+            '--model', options.get('model', 'base'),
+            '--device', options.get('device', 'auto'),
+        ]
+
+        if options.get('skip_questions'):
+            cmd.append('--skip-questions')
+
+        if options.get('skip_articles'):
+            cmd.append('--skip-articles')
+
+        processing_tasks[task_id]['stage'] = 'Запуск обработки...'
+        processing_tasks[task_id]['progress'] = 10
+
+        # Запускаем процесс
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1,
+            universal_newlines=True
+        )
+
+        processing_tasks[task_id]['process'] = process
+
+        # Читаем вывод и обновляем прогресс
+        output_lines = []
+        for line in process.stdout:
+            output_lines.append(line.strip())
+
+            # Обновляем статус на основе вывода
+            if 'Транскрибация' in line:
+                processing_tasks[task_id]['stage'] = 'Транскрибация...'
+                processing_tasks[task_id]['progress'] = 20
+            elif 'Сегментация' in line:
+                processing_tasks[task_id]['stage'] = 'Сегментация...'
+                processing_tasks[task_id]['progress'] = 35
+            elif 'Суммаризация' in line or 'Summarizing' in line:
+                processing_tasks[task_id]['stage'] = 'Суммаризация...'
+                processing_tasks[task_id]['progress'] = 50
+            elif 'Мета-анализ' in line:
+                processing_tasks[task_id]['stage'] = 'Мета-анализ...'
+                processing_tasks[task_id]['progress'] = 65
+            elif 'Извлечение терминов' in line:
+                processing_tasks[task_id]['stage'] = 'Извлечение терминов...'
+                processing_tasks[task_id]['progress'] = 75
+            elif 'Генерация вопросов' in line:
+                processing_tasks[task_id]['stage'] = 'Генерация вопросов...'
+                processing_tasks[task_id]['progress'] = 85
+            elif 'Поиск статей' in line:
+                processing_tasks[task_id]['stage'] = 'Поиск статей...'
+                processing_tasks[task_id]['progress'] = 90
+            elif 'Экспорт' in line:
+                processing_tasks[task_id]['stage'] = 'Экспорт отчёта...'
+                processing_tasks[task_id]['progress'] = 95
+            elif 'ЗАВЕРШЁН' in line or 'SUCCESS' in line:
+                processing_tasks[task_id]['stage'] = 'Завершено!'
+                processing_tasks[task_id]['progress'] = 100
+
+        # Ждём завершения
+        return_code = process.wait()
+
+        if return_code == 0:
+            processing_tasks[task_id]['status'] = 'completed'
+            processing_tasks[task_id]['stage'] = 'Обработка завершена успешно!'
+            processing_tasks[task_id]['progress'] = 100
+            processing_tasks[task_id]['output'] = '\n'.join(output_lines)
+        else:
+            stderr = process.stderr.read()
+            processing_tasks[task_id]['status'] = 'error'
+            processing_tasks[task_id]['stage'] = 'Ошибка обработки'
+            processing_tasks[task_id]['error'] = stderr
+            processing_tasks[task_id]['output'] = '\n'.join(output_lines)
+
+    except Exception as e:
+        processing_tasks[task_id]['status'] = 'error'
+        processing_tasks[task_id]['stage'] = 'Ошибка'
+        processing_tasks[task_id]['error'] = str(e)
+
+
+@app.route('/api/process/start', methods=['POST'])
+def start_processing():
+    """Запуск обработки файла"""
+    data = request.get_json()
+
+    if not data or 'file_path' not in data:
+        return jsonify({'error': 'No file path provided'}), 400
+
+    file_path = data['file_path']
+
+    # Проверяем существование файла
+    if not Path(file_path).exists():
+        return jsonify({'error': 'File not found'}), 404
+
+    # Создаём уникальный ID задачи
+    task_id = f"task_{int(time.time() * 1000)}"
+
+    # Опции обработки
+    options = {
+        'language': data.get('language', 'ru'),
+        'model': data.get('model', 'base'),
+        'device': data.get('device', 'auto'),
+        'skip_questions': data.get('skip_questions', False),
+        'skip_articles': data.get('skip_articles', False),
+    }
+
+    # Инициализируем задачу
+    processing_tasks[task_id] = {
+        'status': 'pending',
+        'stage': 'Инициализация...',
+        'progress': 0,
+        'file_path': file_path,
+        'started_at': time.time(),
+        'options': options
+    }
+
+    # Запускаем в отдельном потоке
+    thread = threading.Thread(
+        target=run_processing,
+        args=(file_path, task_id, options)
+    )
+    thread.daemon = True
+    thread.start()
+
+    return jsonify({
+        'success': True,
+        'task_id': task_id,
+        'message': 'Processing started'
+    })
+
+
+@app.route('/api/process/status/<task_id>')
+def processing_status(task_id):
+    """Получить статус обработки"""
+    if task_id not in processing_tasks:
+        return jsonify({'error': 'Task not found'}), 404
+
+    task = processing_tasks[task_id]
+
+    return jsonify({
+        'task_id': task_id,
+        'status': task['status'],
+        'stage': task['stage'],
+        'progress': task['progress'],
+        'started_at': task['started_at'],
+        'elapsed': time.time() - task['started_at'],
+        'error': task.get('error'),
+        'output': task.get('output')
+    })
+
+
+@app.route('/api/process/cancel/<task_id>', methods=['POST'])
+def cancel_processing(task_id):
+    """Отменить обработку"""
+    if task_id not in processing_tasks:
+        return jsonify({'error': 'Task not found'}), 404
+
+    task = processing_tasks[task_id]
+
+    if 'process' in task:
+        task['process'].terminate()
+        task['status'] = 'cancelled'
+        task['stage'] = 'Отменено пользователем'
+
+    return jsonify({'success': True})
 
 
 if __name__ == '__main__':

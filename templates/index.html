@@ -47,12 +47,26 @@
     </div>
 </div>
 
+<!-- Кнопка обработки нового видео -->
+<div class="row mb-4">
+    <div class="col-12 text-center">
+        <a href="/process" class="btn btn-primary btn-lg" style="padding: 1rem 3rem; font-size: 1.2rem;">
+            <i class="bi bi-plus-circle"></i> Обработать новое видео
+        </a>
+    </div>
+</div>
+
 <!-- Список обработанных видео -->
 <div class="row">
     <div class="col-12">
         <div class="card">
-            <div class="card-header">
-                <i class="bi bi-list-ul"></i> Обработанные видео
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <div>
+                    <i class="bi bi-list-ul"></i> Обработанные видео
+                </div>
+                <a href="/process" class="btn btn-sm btn-light">
+                    <i class="bi bi-plus"></i> Добавить
+                </a>
             </div>
             <div class="card-body">
                 {% if sessions %}
