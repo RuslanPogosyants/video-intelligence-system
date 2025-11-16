@@ -184,27 +184,34 @@ class SegmentSummarizer:
 
         for segment in iterator:
             text = segment["text"]
+            summary = ""  # ВАЖНО: инициализация по умолчанию
 
             # Предобработка текста (очистка от мусора)
-            text_cleaned = self.preprocess_text(text)
+            try:
+                text_cleaned = self.preprocess_text(text)
+            except Exception as e:
+                print(f"[WARN] Error preprocessing segment {segment.get('id', '?')}: {e}")
+                text_cleaned = text  # Fallback на оригинал
 
             # Пропускаем слишком короткие тексты
             if len(text_cleaned) < min_text_length:
-                summary = text_cleaned  # Используем очищенный текст
-                print(f"[WARN] Segment {segment['id']} too short, skipping summarization")
+                summary = text_cleaned if text_cleaned else text
+                if show_progress:
+                    print(f"[WARN] Segment {segment.get('id', '?')} too short ({len(text_cleaned)} chars), skipping summarization")
             else:
                 try:
                     summary = self.summarize_text(text_cleaned)
                 except Exception as e:
-                    print(f"[✗] Error summarizing segment {segment['id']}: {e}")
-                    summary = text_cleaned[:200] + "..."  # Fallback: первые 200 символов
+                    print(f"[✗] Error summarizing segment {segment.get('id', '?')}: {e}")
+                    # Fallback: первые 200 символов или весь текст
+                    summary = text_cleaned[:200] + "..." if len(text_cleaned) > 200 else text_cleaned
 
             # Добавляем суммаризацию к сегменту
             segment_with_summary = segment.copy()
             segment_with_summary["summary"] = summary
             segment_with_summary["original_length"] = len(text)
             segment_with_summary["summary_length"] = len(summary)
-            segment_with_summary["compression_ratio"] = len(text) / len(summary) if summary else 0
+            segment_with_summary["compression_ratio"] = len(text) / len(summary) if summary and len(summary) > 0 else 1.0
 
             summarized_segments.append(segment_with_summary)
 
