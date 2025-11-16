@@ -1,11 +1,12 @@
 # src/generate_questions.py
 """
 Генерация вопросов по содержимому видео
+Phase 2: Интеграция LLM для качественной генерации вопросов
 """
 import json
 import torch
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Optional
 from transformers import T5ForConditionalGeneration, T5Tokenizer
 import random
 
@@ -17,17 +18,38 @@ class QuestionGenerator:
             self,
             model_name: str = "cointegrated/rut5-base-absum",
             device: str = "auto",
-            use_model: bool = True
+            use_model: bool = True,
+            use_llm: bool = False,
+            llm_provider: Optional['LLMProvider'] = None
     ):
         """
         Args:
             model_name: модель для генерации (можно использовать ту же, что для суммаризации)
             device: cuda, cpu, auto
-            use_model: использовать ML модель или rule-based подход
+            use_model: использовать T5 модель или rule-based подход
+            use_llm: использовать LLM (GigaChat) для качественной генерации
+            llm_provider: провайдер LLM (если None, создаётся автоматически)
         """
         self.use_model = use_model
+        self.use_llm = use_llm
 
-        if use_model:
+        # Инициализация LLM (Phase 2)
+        if use_llm and llm_provider is None:
+            try:
+                from .llm_provider import LLMProvider, LLMConfig
+                print("[INFO] Initializing LLM provider for question generation")
+                config = LLMConfig()
+                self.llm = LLMProvider(config)
+            except Exception as e:
+                print(f"[WARN] Failed to initialize LLM: {e}")
+                print("[WARN] Falling back to T5/rule-based approach")
+                self.use_llm = False
+                self.llm = None
+        else:
+            self.llm = llm_provider
+
+        # Инициализация T5 (fallback)
+        if use_model and not use_llm:
             print(f"[INFO] Loading question generation model: {model_name}")
 
             if device == "auto":
@@ -53,7 +75,8 @@ class QuestionGenerator:
                 print(f"[INFO] Falling back to rule-based approach")
                 self.use_model = False
         else:
-            print("[INFO] Using rule-based question generation")
+            if not use_llm:
+                print("[INFO] Using rule-based question generation")
 
     def generate_question_from_text(
             self,
@@ -229,6 +252,7 @@ class QuestionGenerator:
     ) -> Dict:
         """
         Полный процесс генерации вопросов
+        Phase 2: Использует LLM для качественной генерации
         """
         print(f"\n{'=' * 60}")
         print("[INFO] Starting question generation")
@@ -241,21 +265,65 @@ class QuestionGenerator:
         segments = summaries_data["segments"]
         key_points = summaries_data.get("key_points", [])
 
-        # Генерация вопросов из сегментов
-        segment_questions = self.generate_questions_from_segments(
-            segments,
-            num_questions_per_segment=max(1, num_questions // len(segments))
-        )
+        # PHASE 2: Использование LLM для генерации всех вопросов сразу
+        if self.use_llm and self.llm is not None:
+            print("[INFO] Using LLM for question generation")
+            try:
+                # Собираем суммаризации
+                summaries = [seg["summary"] for seg in segments]
 
-        # Генерация ключевых вопросов
-        key_questions = self.generate_key_questions(
-            key_points,
-            num_questions=min(10, num_questions // 2)
-        )
+                # Генерируем вопросы через LLM (качественно!)
+                llm_questions = self.llm.generate_questions(
+                    summaries,
+                    num_questions=num_questions,
+                    difficulty_mix=True
+                )
 
-        # Объединение и перемешивание
-        all_questions = segment_questions + key_questions
-        random.shuffle(all_questions)
+                # Форматируем вопросы с таймкодами
+                all_questions = []
+                for i, q in enumerate(llm_questions):
+                    # Пытаемся найти релевантный сегмент
+                    relevant_segment = segments[i % len(segments)]
+
+                    all_questions.append({
+                        "id": i,
+                        "question": q["question"],
+                        "difficulty": q["difficulty"],
+                        "segment_id": relevant_segment["id"],
+                        "timestamp": relevant_segment["start"],
+                        "type": "llm_generated"
+                    })
+
+            except Exception as e:
+                print(f"[WARN] LLM question generation failed: {e}, using fallback")
+                # Fallback к T5/rule-based
+                segment_questions = self.generate_questions_from_segments(
+                    segments,
+                    num_questions_per_segment=max(1, num_questions // len(segments))
+                )
+                key_questions = self.generate_key_questions(
+                    key_points,
+                    num_questions=min(10, num_questions // 2)
+                )
+                all_questions = segment_questions + key_questions
+                random.shuffle(all_questions)
+
+        else:
+            # Оригинальный подход (T5 или rule-based)
+            segment_questions = self.generate_questions_from_segments(
+                segments,
+                num_questions_per_segment=max(1, num_questions // len(segments))
+            )
+
+            # Генерация ключевых вопросов
+            key_questions = self.generate_key_questions(
+                key_points,
+                num_questions=min(10, num_questions // 2)
+            )
+
+            # Объединение и перемешивание
+            all_questions = segment_questions + key_questions
+            random.shuffle(all_questions)
 
         # Переназначение ID после перемешивания
         for i, q in enumerate(all_questions):
@@ -362,7 +430,8 @@ def main():
     parser = argparse.ArgumentParser(description="Generate questions from video content")
     parser.add_argument("summaries", help="Path to summaries_per_segment.json")
     parser.add_argument("--num-questions", type=int, default=20, help="Number of questions")
-    parser.add_argument("--use-model", action="store_true", help="Use ML model (slower)")
+    parser.add_argument("--use-model", action="store_true", help="Use T5 model (slower)")
+    parser.add_argument("--use-llm", action="store_true", help="Use LLM (GigaChat) for quality (Phase 2)")
     parser.add_argument("--device", default="auto", help="Device (cuda/cpu/auto)")
 
     args = parser.parse_args()
@@ -373,7 +442,8 @@ def main():
     # Создание генератора
     generator = QuestionGenerator(
         device=args.device,
-        use_model=args.use_model
+        use_model=args.use_model,
+        use_llm=args.use_llm
     )
 
     # Генерация вопросов

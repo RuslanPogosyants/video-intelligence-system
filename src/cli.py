@@ -91,12 +91,19 @@ def summarize(segments, model, device):
 
 @cli.command()
 @click.argument('summaries', type=click.Path(exists=True))
-def meta_analyze(summaries):
+@click.option('--use-llm', is_flag=True, help='Использовать LLM (GigaChat) для overview и key points (Phase 2)')
+@click.option('--use-keybert', is_flag=True, help='Использовать KeyBERT для извлечения ключевых слов (Phase 2)')
+def meta_analyze(summaries, use_llm, use_keybert):
     """Мета-анализ и ключевые тезисы"""
     click.echo(f"🔍 Мета-анализ: {summaries}")
 
+    if use_llm:
+        click.echo("   🤖 Использую LLM (GigaChat) для качественного анализа")
+    if use_keybert:
+        click.echo("   🔑 Использую KeyBERT для извлечения ключевых слов")
+
     summaries_path = Path(summaries)
-    analyzer = MetaAnalyzer()
+    analyzer = MetaAnalyzer(use_llm=use_llm, use_keybert=use_keybert)
 
     analysis = analyzer.process_summaries_file(summaries_path)
     click.echo(f"✅ Мета-анализ завершён")
@@ -119,13 +126,17 @@ def extract_terms(transcript, model):
 @cli.command()
 @click.argument('summaries', type=click.Path(exists=True))
 @click.option('--num-questions', default=20, type=int, help='Количество вопросов')
-@click.option('--use-model', is_flag=True, help='Использовать ML модель')
-def generate_questions(summaries, num_questions, use_model):
+@click.option('--use-model', is_flag=True, help='Использовать T5 модель')
+@click.option('--use-llm', is_flag=True, help='Использовать LLM (GigaChat) для качественной генерации (Phase 2)')
+def generate_questions(summaries, num_questions, use_model, use_llm):
     """Генерация вопросов"""
     click.echo(f"❓ Генерация вопросов: {summaries}")
 
+    if use_llm:
+        click.echo("   🤖 Использую LLM (GigaChat) для качественных вопросов")
+
     summaries_path = Path(summaries)
-    generator = QuestionGenerator(use_model=use_model)
+    generator = QuestionGenerator(use_model=use_model, use_llm=use_llm)
 
     questions = generator.process_summaries_file(summaries_path, num_questions)
     click.echo(f"✅ Создано {questions['total_questions']} вопросов")
@@ -178,7 +189,9 @@ def export_report(artifacts_dir, no_pdf):
 @click.option('--enable-scraping', is_flag=True, help='Включить поиск статей')
 @click.option('--skip-questions', is_flag=True, help='Пропустить генерацию вопросов')
 @click.option('--skip-articles', is_flag=True, help='Пропустить поиск статей')
-def process_all(video, model, language, device, output_dir, enable_scraping, skip_questions, skip_articles):
+@click.option('--use-llm', is_flag=True, help='Использовать LLM (GigaChat) для качественного анализа (Phase 2)')
+@click.option('--use-keybert', is_flag=True, help='Использовать KeyBERT для ключевых слов (Phase 2)')
+def process_all(video, model, language, device, output_dir, enable_scraping, skip_questions, skip_articles, use_llm, use_keybert):
     """
     ПОЛНЫЙ ПАЙПЛАЙН: транскрибация → сегментация → суммаризация →
     анализ → термины → вопросы → статьи → экспорт
@@ -208,7 +221,11 @@ def process_all(video, model, language, device, output_dir, enable_scraping, ski
 
         # Этап 4: Мета-анализ
         click.echo("\n[4/8] 🔍 Мета-анализ...")
-        analyzer = MetaAnalyzer()
+        if use_llm:
+            click.echo("   🤖 Использую LLM (GigaChat) для качественного анализа")
+        if use_keybert:
+            click.echo("   🔑 Использую KeyBERT для ключевых слов")
+        analyzer = MetaAnalyzer(use_llm=use_llm, use_keybert=use_keybert)
         analysis = analyzer.process_summaries_file(summaries_path)
 
         # Этап 5: Извлечение терминов
@@ -220,7 +237,9 @@ def process_all(video, model, language, device, output_dir, enable_scraping, ski
         # Этап 6: Генерация вопросов (опционально)
         if not skip_questions:
             click.echo("\n[6/8] ❓ Генерация вопросов...")
-            generator = QuestionGenerator(use_model=False)
+            if use_llm:
+                click.echo("   🤖 Использую LLM (GigaChat) для качественных вопросов")
+            generator = QuestionGenerator(use_model=False, use_llm=use_llm)
             questions = generator.process_summaries_file(summaries_path)
         else:
             click.echo("\n[6/8] ⏭️  Пропускаем генерацию вопросов")

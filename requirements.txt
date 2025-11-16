@@ -9,6 +9,10 @@ spacy>=3.5.0
 nltk>=3.8.0
 scikit-learn>=1.3.0
 
+# LLM (Phase 2)
+gigachat>=0.1.0
+keybert>=0.8.0
+
 # Audio/Video Processing
 yt-dlp>=2023.3.0
 pydub>=0.25.0
