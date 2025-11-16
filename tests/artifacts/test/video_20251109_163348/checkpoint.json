@@ -1,0 +1,14 @@
+{
+  "stage": "segmentation_complete",
+  "video_source": "C:\\Users\\Firebat T6A\\PycharmProjects\\video-intelligence-system\\artifacts\\test_lecture.wav",
+  "timestamp": 1762695243.7380383,
+  "output_path": "artifacts\\test\\video_20251109_163348",
+  "files": {
+    "video": "C:\\Users\\Firebat T6A\\PycharmProjects\\video-intelligence-system\\artifacts\\test_lecture.wav",
+    "audio": "artifacts\\test\\video_20251109_163348\\audio.wav",
+    "transcript_json": "artifacts\\test\\video_20251109_163348\\transcript_raw.json",
+    "transcript_txt": "artifacts\\test\\video_20251109_163348\\transcript_formatted.txt",
+    "segments_json": "tests\\artifacts\\test\\video_20251109_163348\\segments_semantic.json",
+    "segments_txt": "tests\\artifacts\\test\\video_20251109_163348\\segments_summary.txt"
+  }
+}

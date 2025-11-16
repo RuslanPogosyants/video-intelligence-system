@@ -1,0 +1,44 @@
+# config/config.yaml
+system:
+  device: "cuda"  # cuda, cpu, auto
+  fallback_to_cpu: true
+  checkpoint_dir: "artifacts/checkpoints"
+  models_dir: "models"
+
+transcription:
+  model: "base"  # tiny, base, small, medium, large
+  language: "ru"
+  use_faster_whisper: true
+  batch_size: 16
+  chunk_length: 30  # seconds
+
+segmentation:
+  method: "semantic"  # semantic, time-based, hybrid
+  min_segment_length: 60  # seconds
+  max_segment_length: 600
+  overlap: 10
+
+summarization:
+  model: "cointegrated/rut5-base-absum"
+  max_input_length: 600
+  max_output_length: 150
+  num_beams: 4
+  use_paid_api: false
+
+ner:
+  model: "spacy_ru_core_news_lg"
+  extract_terms: true
+  min_term_frequency: 2
+
+questions:
+  num_questions: 10
+  difficulty_levels: ["easy", "medium", "hard"]
+
+search:
+  enable_scraping: true
+  max_articles: 5
+  rate_limit_delay: 2  # seconds
+
+export:
+  formats: ["html", "pdf", "json"]
+  include_timestamps: true
