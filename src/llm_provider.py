@@ -2,6 +2,7 @@
 """
 LLM Provider для качественной обработки образовательного контента
 Поддержка: GigaChat (Sberbank)
+Phase 3: Кэширование и генерация ответов к вопросам
 """
 import os
 from typing import List, Dict, Optional
@@ -18,6 +19,7 @@ class LLMConfig:
     max_tokens: int = 2000
     verify_ssl: bool = False  # Для GigaChat часто нужно False
     scope: str = "GIGACHAT_API_PERS"  # Для физлиц
+    use_cache: bool = True  # Phase 3: Включить кэширование
 
 
 class GigaChatProvider:
@@ -126,6 +128,59 @@ class LLMProvider:
         else:
             raise ValueError(f"Unsupported provider: {self.config.provider}")
 
+        # Phase 3: Инициализация кэша
+        if self.config.use_cache:
+            try:
+                from .llm_cache import LLMCache
+                self.cache = LLMCache(enabled=True)
+                print("[INFO] LLM caching enabled")
+            except Exception as e:
+                print(f"[WARN] Failed to initialize cache: {e}")
+                self.cache = None
+        else:
+            self.cache = None
+
+    def _chat_with_cache(
+            self,
+            prompt: str,
+            system_prompt: Optional[str] = None,
+            temperature: Optional[float] = None
+    ) -> str:
+        """
+        Отправка запроса с кэшированием (Phase 3)
+
+        Args:
+            prompt: пользовательский промпт
+            system_prompt: системный промпт
+            temperature: температура
+
+        Returns:
+            Ответ модели (из кэша или новый)
+        """
+        # Формируем конфигурацию для кэша
+        cache_config = {
+            "model": self.config.model,
+            "temperature": temperature or self.config.temperature,
+            "system_prompt": system_prompt or ""
+        }
+
+        # Проверяем кэш
+        if self.cache:
+            cached_response = self.cache.get(prompt, cache_config)
+            if cached_response:
+                return cached_response
+
+        # Вызываем API
+        response = self.provider.chat(prompt, system_prompt, temperature)
+
+        # Сохраняем в кэш
+        if self.cache:
+            # Примерная оценка токенов (грубая)
+            tokens_estimate = len(prompt.split()) + len(response.split())
+            self.cache.set(prompt, cache_config, response, tokens=tokens_estimate)
+
+        return response
+
     def generate_overview(self, summaries: List[str], metadata: Dict = None) -> str:
         """
         Генерация общего обзора лекции
@@ -163,8 +218,8 @@ class LLMProvider:
 
 Обзор лекции:"""
 
-        # Генерация
-        overview = self.provider.chat(
+        # Генерация с кэшированием
+        overview = self._chat_with_cache(
             prompt=user_prompt,
             system_prompt=system_prompt,
             temperature=0.3
@@ -214,8 +269,8 @@ class LLMProvider:
 
 Ключевые тезисы:"""
 
-        # Генерация
-        response = self.provider.chat(
+        # Генерация с кэшированием
+        response = self._chat_with_cache(
             prompt=user_prompt,
             system_prompt=system_prompt,
             temperature=0.3
@@ -238,7 +293,8 @@ class LLMProvider:
             self,
             summaries: List[str],
             num_questions: int = 10,
-            difficulty_mix: bool = True
+            difficulty_mix: bool = True,
+            with_answers: bool = True  # Phase 3: Генерация ответов
     ) -> List[Dict[str, str]]:
         """
         Генерация вопросов для самопроверки
@@ -247,9 +303,10 @@ class LLMProvider:
             summaries: список суммаризаций сегментов
             num_questions: количество вопросов
             difficulty_mix: генерировать вопросы разной сложности (easy, medium, hard)
+            with_answers: генерировать ответы к вопросам (Phase 3)
 
         Returns:
-            Список вопросов с метаданными
+            Список вопросов с метаданными (и ответами, если with_answers=True)
         """
         print(f"[INFO] Generating {num_questions} questions with LLM...")
 
@@ -260,8 +317,9 @@ class LLMProvider:
         ])
 
         # Системный промпт
-        system_prompt = """Ты — эксперт по созданию образовательных материалов.
-Твоя задача — создать вопросы для самопроверки по содержанию лекции.
+        if with_answers:
+            system_prompt = """Ты — эксперт по созданию образовательных материалов.
+Твоя задача — создать вопросы для самопроверки с правильными ответами и объяснениями.
 
 Используй таксономию Блума для разных уровней сложности:
 - EASY (базовый уровень): вопросы на запоминание, понимание фактов
@@ -272,13 +330,32 @@ class LLMProvider:
 - Вопросы должны быть конкретными и однозначными
 - Избегай вопросов типа "да/нет"
 - Вопросы должны проверять понимание, а не просто факты
-- Вопросы должны быть релевантны содержанию лекции
+- Ответы должны быть краткими и точными
+- Объяснения должны помогать понять суть
 
 Формат ответа (строго соблюдай):
-[EASY] Вопрос про базовое понятие?
-[MEDIUM] Вопрос на применение концепции?
-[HARD] Вопрос на критическое мышление?
+[EASY] Вопрос?
+ОТВЕТ: Краткий правильный ответ.
+ОБЪЯСНЕНИЕ: Пояснение, почему это правильный ответ.
+
+[MEDIUM] Вопрос?
+ОТВЕТ: Краткий правильный ответ.
+ОБЪЯСНЕНИЕ: Пояснение.
+
 ...и так далее"""
+        else:
+            system_prompt = """Ты — эксперт по созданию образовательных материалов.
+Твоя задача — создать вопросы для самопроверки по содержанию лекции.
+
+Используй таксономию Блума для разных уровней сложности:
+- EASY (базовый уровень): вопросы на запоминание, понимание фактов
+- MEDIUM (применение): вопросы на анализ, применение концепций
+- HARD (синтез): вопросы на оценку, синтез, критическое мышление
+
+Формат ответа:
+[EASY] Вопрос?
+[MEDIUM] Вопрос?
+[HARD] Вопрос?"""
 
         # Пользовательский промпт
         difficulty_instruction = ""
@@ -302,8 +379,8 @@ class LLMProvider:
 
 Вопросы:"""
 
-        # Генерация
-        response = self.provider.chat(
+        # Генерация с кэшированием
+        response = self._chat_with_cache(
             prompt=user_prompt,
             system_prompt=system_prompt,
             temperature=0.5  # Чуть выше для разнообразия
@@ -311,33 +388,54 @@ class LLMProvider:
 
         # Парсинг вопросов
         questions = []
+        current_question = None
+        current_answer = None
+        current_explanation = None
+
         for line in response.strip().split('\n'):
             line = line.strip()
             if not line:
                 continue
 
             # Поиск уровня сложности
-            difficulty = "medium"  # По умолчанию
-            question_text = line
+            if any(tag in line.upper() for tag in ["[EASY]", "[MEDIUM]", "[HARD]"]):
+                # Сохраняем предыдущий вопрос, если есть
+                if current_question:
+                    questions.append({
+                        "question": current_question["text"],
+                        "difficulty": current_question["difficulty"],
+                        "answer": current_answer,
+                        "explanation": current_explanation
+                    })
 
-            if "[EASY]" in line.upper():
-                difficulty = "easy"
-                question_text = line.split(']', 1)[1].strip()
-            elif "[MEDIUM]" in line.upper():
+                # Начинаем новый вопрос
                 difficulty = "medium"
-                question_text = line.split(']', 1)[1].strip()
-            elif "[HARD]" in line.upper():
-                difficulty = "hard"
-                question_text = line.split(']', 1)[1].strip()
+                if "[EASY]" in line.upper():
+                    difficulty = "easy"
+                elif "[HARD]" in line.upper():
+                    difficulty = "hard"
 
-            # Убираем нумерацию, если есть
-            question_text = question_text.lstrip('0123456789.-) ').strip()
+                question_text = line.split(']', 1)[1].strip()
+                question_text = question_text.lstrip('0123456789.-) ').strip()
 
-            if question_text and len(question_text) > 10:
-                questions.append({
-                    "question": question_text,
-                    "difficulty": difficulty
-                })
+                current_question = {"text": question_text, "difficulty": difficulty}
+                current_answer = None
+                current_explanation = None
+
+            elif line.upper().startswith("ОТВЕТ:"):
+                current_answer = line.split(':', 1)[1].strip()
+
+            elif line.upper().startswith("ОБЪЯСНЕНИЕ:"):
+                current_explanation = line.split(':', 1)[1].strip()
+
+        # Добавляем последний вопрос
+        if current_question:
+            questions.append({
+                "question": current_question["text"],
+                "difficulty": current_question["difficulty"],
+                "answer": current_answer,
+                "explanation": current_explanation
+            })
 
         return questions[:num_questions]
 
@@ -349,7 +447,8 @@ def main():
         provider="gigachat",
         model="GigaChat",
         api_key=os.getenv("GIGACHAT_CREDENTIALS"),
-        temperature=0.3
+        temperature=0.3,
+        use_cache=True  # Phase 3: Включить кэш
     )
 
     # Инициализация провайдера
@@ -373,11 +472,22 @@ def main():
     for i, point in enumerate(key_points, 1):
         print(f"{i}. {point}")
 
-    # Генерация вопросов
-    print("\n=== QUESTIONS ===")
-    questions = llm.generate_questions(example_summaries, num_questions=5)
+    # Генерация вопросов с ответами (Phase 3)
+    print("\n=== QUESTIONS WITH ANSWERS ===")
+    questions = llm.generate_questions(example_summaries, num_questions=3, with_answers=True)
     for q in questions:
-        print(f"[{q['difficulty'].upper()}] {q['question']}")
+        print(f"\n[{q['difficulty'].upper()}] {q['question']}")
+        if q.get('answer'):
+            print(f"  Ответ: {q['answer']}")
+        if q.get('explanation'):
+            print(f"  Объяснение: {q['explanation']}")
+
+    # Статистика кэша
+    if llm.cache:
+        stats = llm.cache.get_stats()
+        print(f"\n=== CACHE STATS ===")
+        print(f"Entries: {stats['total_entries']}")
+        print(f"Estimated tokens saved: {stats['estimated_tokens_saved']}")
 
 
 if __name__ == "__main__":

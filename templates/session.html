@@ -456,6 +456,22 @@
                         </div>
                     </div>
                     <p class="mt-3 mb-2" style="font-size: 1.1rem;">{{ question.question }}</p>
+
+                    <!-- Phase 3: Показываем ответ и объяснение -->
+                    {% if question.answer %}
+                    <div class="alert alert-success mt-3" style="background: #d1fae5; border: none; border-left: 4px solid #10b981;">
+                        <strong><i class="bi bi-check-circle"></i> Правильный ответ:</strong>
+                        <p class="mb-0 mt-2">{{ question.answer }}</p>
+                    </div>
+                    {% endif %}
+
+                    {% if question.explanation %}
+                    <div class="alert alert-info mt-2" style="background: #dbeafe; border: none; border-left: 4px solid #3b82f6;">
+                        <strong><i class="bi bi-lightbulb"></i> Объяснение:</strong>
+                        <p class="mb-0 mt-2">{{ question.explanation }}</p>
+                    </div>
+                    {% endif %}
+
                     {% if question.timestamp is defined %}
                     <small class="text-muted">
                         <i class="bi bi-clock"></i> Таймкод: <span class="timestamp">{{ question.timestamp|format_time }}</span>

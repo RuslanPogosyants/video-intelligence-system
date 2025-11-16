@@ -303,6 +303,16 @@ def run_processing(file_path: str, task_id: str, options: Dict):
             '--device', options.get('device', 'auto'),
         ]
 
+        # Phase 3: Добавляем флаги для LLM/KeyBERT/Answers
+        if options.get('use_llm'):
+            cmd.append('--use-llm')
+
+        if options.get('use_keybert'):
+            cmd.append('--use-keybert')
+
+        if options.get('with_answers'):
+            cmd.append('--with-answers')
+
         if options.get('skip_questions'):
             cmd.append('--skip-questions')
 
@@ -403,6 +413,10 @@ def start_processing():
         'device': data.get('device', 'auto'),
         'skip_questions': data.get('skip_questions', False),
         'skip_articles': data.get('skip_articles', False),
+        # Phase 3: Новые опции
+        'use_llm': data.get('use_llm', True),  # По умолчанию включено
+        'use_keybert': data.get('use_keybert', True),  # По умолчанию включено
+        'with_answers': data.get('with_answers', True),  # По умолчанию включено
     }
 
     # Инициализируем задачу

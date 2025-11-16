@@ -162,6 +162,37 @@
                         </select>
                     </div>
 
+                    <!-- Phase 3: Новые чекбоксы для LLM и KeyBERT -->
+                    <div class="col-md-6 mb-3">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="useLLM" checked>
+                            <label class="form-check-label" for="useLLM">
+                                <i class="bi bi-robot"></i> Использовать LLM (GigaChat) для качественной генерации
+                            </label>
+                            <small class="form-text text-muted d-block">Улучшает качество суммаризаций, вопросов и ключевых тезисов</small>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 mb-3">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="useKeyBERT" checked>
+                            <label class="form-check-label" for="useKeyBERT">
+                                <i class="bi bi-key"></i> Использовать KeyBERT для извлечения ключевых слов
+                            </label>
+                            <small class="form-text text-muted d-block">Семантическое извлечение ключевых понятий</small>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 mb-3">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="withAnswers" checked>
+                            <label class="form-check-label" for="withAnswers">
+                                <i class="bi bi-patch-check"></i> Генерировать ответы и объяснения к вопросам
+                            </label>
+                            <small class="form-text text-muted d-block">Создаёт полноценные вопросы с правильными ответами</small>
+                        </div>
+                    </div>
+
                     <div class="col-md-6 mb-3">
                         <div class="form-check form-switch">
                             <input class="form-check-input" type="checkbox" id="skipQuestions">
@@ -373,7 +404,11 @@ document.getElementById('startProcessingBtn').addEventListener('click', function
         model: document.getElementById('modelSelect').value,
         device: document.getElementById('deviceSelect').value,
         skip_questions: document.getElementById('skipQuestions').checked,
-        skip_articles: document.getElementById('skipArticles').checked
+        skip_articles: document.getElementById('skipArticles').checked,
+        // Phase 3: Новые опции
+        use_llm: document.getElementById('useLLM').checked,
+        use_keybert: document.getElementById('useKeyBERT').checked,
+        with_answers: document.getElementById('withAnswers').checked
     };
 
     // Скрываем кнопку, показываем прогресс

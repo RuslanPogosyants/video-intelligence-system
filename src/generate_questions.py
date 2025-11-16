@@ -248,11 +248,13 @@ class QuestionGenerator:
             self,
             summaries_path: Path,
             num_questions: int = 20,
-            output_dir: Path = None
+            output_dir: Path = None,
+            with_answers: bool = True
     ) -> Dict:
         """
         Полный процесс генерации вопросов
         Phase 2: Использует LLM для качественной генерации
+        Phase 3: Добавлена генерация ответов и объяснений
         """
         print(f"\n{'=' * 60}")
         print("[INFO] Starting question generation")
@@ -273,10 +275,12 @@ class QuestionGenerator:
                 summaries = [seg["summary"] for seg in segments]
 
                 # Генерируем вопросы через LLM (качественно!)
+                # Phase 3: С ответами и объяснениями
                 llm_questions = self.llm.generate_questions(
                     summaries,
                     num_questions=num_questions,
-                    difficulty_mix=True
+                    difficulty_mix=True,
+                    with_answers=with_answers
                 )
 
                 # Форматируем вопросы с таймкодами
@@ -285,14 +289,22 @@ class QuestionGenerator:
                     # Пытаемся найти релевантный сегмент
                     relevant_segment = segments[i % len(segments)]
 
-                    all_questions.append({
+                    question_dict = {
                         "id": i,
                         "question": q["question"],
                         "difficulty": q["difficulty"],
                         "segment_id": relevant_segment["id"],
                         "timestamp": relevant_segment["start"],
                         "type": "llm_generated"
-                    })
+                    }
+
+                    # Phase 3: Добавляем ответ и объяснение (если есть)
+                    if with_answers and "answer" in q:
+                        question_dict["answer"] = q["answer"]
+                    if with_answers and "explanation" in q:
+                        question_dict["explanation"] = q["explanation"]
+
+                    all_questions.append(question_dict)
 
             except Exception as e:
                 print(f"[WARN] LLM question generation failed: {e}, using fallback")
@@ -402,7 +414,14 @@ class QuestionGenerator:
 
                     for q in difficulty_questions:
                         f.write(f"Вопрос {q['id'] + 1}:\n")
-                        f.write(f"{q['question']}\n")
+                        f.write(f"{q['question']}\n\n")
+
+                        # Phase 3: Показываем ответ и объяснение (если есть)
+                        if "answer" in q:
+                            f.write(f"ОТВЕТ:\n{q['answer']}\n\n")
+
+                        if "explanation" in q:
+                            f.write(f"ОБЪЯСНЕНИЕ:\n{q['explanation']}\n\n")
 
                         if "timestamp" in q:
                             f.write(f"Таймкод: {self._format_time(q['timestamp'])}\n")
@@ -432,6 +451,7 @@ def main():
     parser.add_argument("--num-questions", type=int, default=20, help="Number of questions")
     parser.add_argument("--use-model", action="store_true", help="Use T5 model (slower)")
     parser.add_argument("--use-llm", action="store_true", help="Use LLM (GigaChat) for quality (Phase 2)")
+    parser.add_argument("--with-answers", action="store_true", default=True, help="Generate answers and explanations (Phase 3)")
     parser.add_argument("--device", default="auto", help="Device (cuda/cpu/auto)")
 
     args = parser.parse_args()
@@ -450,7 +470,8 @@ def main():
     questions = generator.process_summaries_file(
         summaries_path,
         num_questions=args.num_questions,
-        output_dir=output_dir
+        output_dir=output_dir,
+        with_answers=args.with_answers
     )
 
     # Обновление checkpoint
