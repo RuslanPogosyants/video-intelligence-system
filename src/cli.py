@@ -128,17 +128,20 @@ def extract_terms(transcript, model):
 @click.option('--num-questions', default=20, type=int, help='Количество вопросов')
 @click.option('--use-model', is_flag=True, help='Использовать T5 модель')
 @click.option('--use-llm', is_flag=True, help='Использовать LLM (GigaChat) для качественной генерации (Phase 2)')
-def generate_questions(summaries, num_questions, use_model, use_llm):
+@click.option('--with-answers', is_flag=True, default=True, help='Генерировать ответы и объяснения (Phase 3)')
+def generate_questions(summaries, num_questions, use_model, use_llm, with_answers):
     """Генерация вопросов"""
     click.echo(f"❓ Генерация вопросов: {summaries}")
 
     if use_llm:
         click.echo("   🤖 Использую LLM (GigaChat) для качественных вопросов")
+    if with_answers:
+        click.echo("   ✅ Генерация ответов и объяснений включена")
 
     summaries_path = Path(summaries)
     generator = QuestionGenerator(use_model=use_model, use_llm=use_llm)
 
-    questions = generator.process_summaries_file(summaries_path, num_questions)
+    questions = generator.process_summaries_file(summaries_path, num_questions, with_answers=with_answers)
     click.echo(f"✅ Создано {questions['total_questions']} вопросов")
 
 
@@ -191,7 +194,8 @@ def export_report(artifacts_dir, no_pdf):
 @click.option('--skip-articles', is_flag=True, help='Пропустить поиск статей')
 @click.option('--use-llm', is_flag=True, help='Использовать LLM (GigaChat) для качественного анализа (Phase 2)')
 @click.option('--use-keybert', is_flag=True, help='Использовать KeyBERT для ключевых слов (Phase 2)')
-def process_all(video, model, language, device, output_dir, enable_scraping, skip_questions, skip_articles, use_llm, use_keybert):
+@click.option('--with-answers', is_flag=True, default=True, help='Генерировать ответы и объяснения к вопросам (Phase 3)')
+def process_all(video, model, language, device, output_dir, enable_scraping, skip_questions, skip_articles, use_llm, use_keybert, with_answers):
     """
     ПОЛНЫЙ ПАЙПЛАЙН: транскрибация → сегментация → суммаризация →
     анализ → термины → вопросы → статьи → экспорт
@@ -239,8 +243,14 @@ def process_all(video, model, language, device, output_dir, enable_scraping, ski
             click.echo("\n[6/8] ❓ Генерация вопросов...")
             if use_llm:
                 click.echo("   🤖 Использую LLM (GigaChat) для качественных вопросов")
+            if with_answers:
+                click.echo("   ✅ Генерация ответов и объяснений включена")
             generator = QuestionGenerator(use_model=False, use_llm=use_llm)
-            questions = generator.process_summaries_file(summaries_path)
+            questions = generator.process_summaries_file(
+                summaries_path,
+                num_questions=20,
+                with_answers=with_answers
+            )
         else:
             click.echo("\n[6/8] ⏭️  Пропускаем генерацию вопросов")
 

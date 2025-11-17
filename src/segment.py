@@ -48,12 +48,22 @@ class TranscriptSegmenter:
     def compute_embeddings(self, sentences: List[str]) -> np.ndarray:
         """Вычисление эмбеддингов для предложений"""
         print(f"[INFO] Computing embeddings for {len(sentences)} sentences")
+        print(f"[INFO] This may take a few minutes depending on text length...")
+        print(f"[INFO] Processing in batches of 32 sentences")
+
+        import time
+        start_time = time.time()
+
         embeddings = self.model.encode(
             sentences,
             batch_size=32,
             show_progress_bar=True,
             convert_to_numpy=True
         )
+
+        elapsed = time.time() - start_time
+        print(f"[✓] Embeddings computed in {elapsed:.1f}s ({len(sentences)/elapsed:.1f} sentences/sec)")
+
         return embeddings
 
     def segment_by_similarity(
@@ -71,6 +81,7 @@ class TranscriptSegmenter:
             List[List[int]]: список сегментов, каждый сегмент - список индексов предложений
         """
         print(f"[INFO] Segmenting by similarity (threshold={threshold})")
+        print(f"[INFO] Processing {len(sentences)} sentences...")
 
         if len(sentences) == 0:
             return []
@@ -78,7 +89,14 @@ class TranscriptSegmenter:
         segments = []
         current_segment = [0]
 
+        # Показываем прогресс каждые 10%
+        progress_step = max(len(sentences) // 10, 1)
+
         for i in range(1, len(sentences)):
+            if i % progress_step == 0:
+                progress = (i / len(sentences)) * 100
+                print(f"[INFO] Segmentation progress: {progress:.0f}% ({i}/{len(sentences)} sentences)")
+
             # Сравниваем текущее предложение с предыдущим
             sim = cosine_similarity(
                 embeddings[i].reshape(1, -1),
@@ -157,11 +175,12 @@ class TranscriptSegmenter:
         """
         Сопоставление предложений с временными метками из транскрипции
         """
-        print("[INFO] Mapping sentences to timestamps")
+        print(f"[INFO] Mapping {len(sentences)} sentences to timestamps")
 
         sentence_timestamps = []
         full_transcript = " ".join([seg["text"] for seg in transcript_segments])
 
+        print(f"[INFO] Building character-to-time mapping for {len(full_transcript)} characters...")
         char_to_time = []  # Маппинг позиции символа на время
         current_pos = 0
 
@@ -174,9 +193,16 @@ class TranscriptSegmenter:
                 })
             current_pos += len(seg_text)
 
+        print(f"[INFO] Mapping sentences to timestamps...")
         # Для каждого предложения найдём его позицию в полном тексте
         search_pos = 0
-        for sent in sentences:
+        progress_step = max(len(sentences) // 10, 1)
+
+        for idx, sent in enumerate(sentences):
+            if idx % progress_step == 0:
+                progress = (idx / len(sentences)) * 100
+                print(f"[INFO] Timestamp mapping progress: {progress:.0f}% ({idx}/{len(sentences)} sentences)")
+
             try:
                 pos = full_transcript.index(sent, search_pos)
                 search_pos = pos + len(sent)
@@ -206,6 +232,7 @@ class TranscriptSegmenter:
                     "end": 0
                 })
 
+        print(f"[✓] Timestamp mapping complete! Mapped {len(sentence_timestamps)} sentences")
         return sentence_timestamps
 
     def create_semantic_segments(
@@ -230,20 +257,25 @@ class TranscriptSegmenter:
         print(f"{'=' * 60}\n")
 
         # Загрузка транскрипции
+        print(f"[INFO] Loading transcript from {transcript_path}")
         with open(transcript_path, 'r', encoding='utf-8') as f:
             transcript = json.load(f)
 
         full_text = transcript["full_text"]
         transcript_segments = transcript["segments"]
+        print(f"[INFO] Loaded transcript with {len(transcript_segments)} segments, {len(full_text)} characters")
 
         # Разбивка на предложения
+        print(f"[INFO] Splitting text into sentences...")
         sentences = self.split_into_sentences(full_text)
-        print(f"[INFO] Split into {len(sentences)} sentences")
+        print(f"[✓] Split into {len(sentences)} sentences")
 
         # Вычисление эмбеддингов
+        print(f"\n[STEP 1/4] Computing sentence embeddings...")
         embeddings = self.compute_embeddings(sentences)
 
         # Сегментация
+        print(f"\n[STEP 2/4] Performing semantic segmentation...")
         if method == "similarity":
             segment_indices = self.segment_by_similarity(
                 sentences, embeddings, **kwargs
@@ -256,11 +288,13 @@ class TranscriptSegmenter:
             raise ValueError(f"Unknown method: {method}")
 
         # Маппинг на временные метки
+        print(f"\n[STEP 3/4] Mapping sentences to timestamps...")
         sentence_timestamps = self.map_sentences_to_timestamps(
             sentences, transcript_segments
         )
 
         # Формирование финальных сегментов
+        print(f"\n[STEP 4/4] Building final semantic segments...")
         final_segments = []
         for i, indices in enumerate(segment_indices):
             segment_sentences = [sentence_timestamps[idx] for idx in indices]

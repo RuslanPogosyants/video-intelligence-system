@@ -73,7 +73,24 @@ class GigaChatProvider:
         Returns:
             Ответ модели
         """
+        import time
+
         temp = temperature if temperature is not None else self.config.temperature
+
+        # Подсчет размера запроса
+        prompt_length = len(prompt)
+        system_length = len(system_prompt) if system_prompt else 0
+        total_chars = prompt_length + system_length
+
+        print(f"\n[GIGACHAT] 🚀 Sending request to GigaChat API")
+        print(f"[GIGACHAT] Model: {self.config.model}")
+        print(f"[GIGACHAT] Temperature: {temp}")
+        print(f"[GIGACHAT] Prompt size: {prompt_length} chars")
+        if system_prompt:
+            print(f"[GIGACHAT] System prompt size: {system_length} chars")
+        print(f"[GIGACHAT] Total size: {total_chars} chars (~{total_chars // 4} tokens)")
+
+        start_time = time.time()
 
         try:
             with self.GigaChat(
@@ -97,16 +114,33 @@ class GigaChatProvider:
                 })
 
                 # Запрос к API
+                print(f"[GIGACHAT] ⏳ Waiting for response...")
                 response = giga.chat(
                     messages=messages,
                     temperature=temp,
                     max_tokens=self.config.max_tokens
                 )
 
-                return response.choices[0].message.content
+                elapsed = time.time() - start_time
+                response_text = response.choices[0].message.content
+                response_length = len(response_text)
+
+                print(f"[GIGACHAT] ✅ Response received in {elapsed:.2f}s")
+                print(f"[GIGACHAT] Response size: {response_length} chars (~{response_length // 4} tokens)")
+
+                # Если есть информация об использовании токенов
+                if hasattr(response, 'usage') and response.usage:
+                    print(f"[GIGACHAT] 💰 Token usage:")
+                    print(f"[GIGACHAT]   - Prompt tokens: {response.usage.prompt_tokens}")
+                    print(f"[GIGACHAT]   - Completion tokens: {response.usage.completion_tokens}")
+                    print(f"[GIGACHAT]   - Total tokens: {response.usage.total_tokens}")
+
+                return response_text
 
         except Exception as e:
-            print(f"[ERROR] GigaChat request failed: {e}")
+            elapsed = time.time() - start_time
+            print(f"[GIGACHAT] ❌ Request failed after {elapsed:.2f}s")
+            print(f"[GIGACHAT] Error: {e}")
             raise
 
 
@@ -166,9 +200,14 @@ class LLMProvider:
 
         # Проверяем кэш
         if self.cache:
+            print(f"[CACHE] 🔍 Checking cache...")
             cached_response = self.cache.get(prompt, cache_config)
             if cached_response:
+                print(f"[CACHE] ✅ Cache HIT! Using cached response")
+                print(f"[CACHE] 💰 Tokens saved: ~{len(prompt.split()) + len(cached_response.split())}")
                 return cached_response
+            else:
+                print(f"[CACHE] ❌ Cache MISS - will fetch from API")
 
         # Вызываем API
         response = self.provider.chat(prompt, system_prompt, temperature)
@@ -177,6 +216,7 @@ class LLMProvider:
         if self.cache:
             # Примерная оценка токенов (грубая)
             tokens_estimate = len(prompt.split()) + len(response.split())
+            print(f"[CACHE] 💾 Saving response to cache (~{tokens_estimate} tokens)")
             self.cache.set(prompt, cache_config, response, tokens=tokens_estimate)
 
         return response
@@ -192,7 +232,10 @@ class LLMProvider:
         Returns:
             Общий обзор лекции
         """
-        print("[INFO] Generating lecture overview with LLM...")
+        print("\n" + "=" * 60)
+        print("[LLM] 📝 Generating lecture overview")
+        print("=" * 60)
+        print(f"[LLM] Input: {len(summaries)} summaries")
 
         # Объединяем суммаризации
         combined_text = "\n\n".join([
@@ -238,7 +281,10 @@ class LLMProvider:
         Returns:
             Список ключевых тезисов
         """
-        print(f"[INFO] Extracting {num_points} key points with LLM...")
+        print("\n" + "=" * 60)
+        print(f"[LLM] 🎯 Extracting {num_points} key points")
+        print("=" * 60)
+        print(f"[LLM] Input: {len(summaries)} summaries")
 
         # Объединяем суммаризации
         combined_text = "\n\n".join([
@@ -308,7 +354,12 @@ class LLMProvider:
         Returns:
             Список вопросов с метаданными (и ответами, если with_answers=True)
         """
-        print(f"[INFO] Generating {num_questions} questions with LLM...")
+        print("\n" + "=" * 60)
+        print(f"[LLM] ❓ Generating {num_questions} questions")
+        print("=" * 60)
+        print(f"[LLM] Input: {len(summaries)} summaries")
+        print(f"[LLM] With answers: {with_answers}")
+        print(f"[LLM] Difficulty mix: {difficulty_mix}")
 
         # Объединяем суммаризации
         combined_text = "\n\n".join([
@@ -436,6 +487,11 @@ class LLMProvider:
                 "answer": current_answer,
                 "explanation": current_explanation
             })
+
+        print(f"\n[LLM] ✅ Successfully parsed {len(questions)} questions")
+        if with_answers:
+            questions_with_answers = sum(1 for q in questions if q.get('answer'))
+            print(f"[LLM] Questions with answers: {questions_with_answers}/{len(questions)}")
 
         return questions[:num_questions]
 

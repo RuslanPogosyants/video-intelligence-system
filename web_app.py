@@ -8,6 +8,7 @@ import json
 from datetime import datetime
 from typing import Dict, List, Optional
 import os
+import sys
 import subprocess
 import threading
 import time
@@ -294,9 +295,9 @@ def run_processing(file_path: str, task_id: str, options: Dict):
         processing_tasks[task_id]['stage'] = 'Подготовка...'
         processing_tasks[task_id]['progress'] = 5
 
-        # Формируем команду
+        # Формируем команду с unbuffered режимом (-u флаг)
         cmd = [
-            'python', '-m', 'src.cli', 'process-all',
+            sys.executable, '-u', '-m', 'src.cli', 'process-all',
             file_path,
             '--language', options.get('language', 'ru'),
             '--model', options.get('model', 'base'),
@@ -322,54 +323,81 @@ def run_processing(file_path: str, task_id: str, options: Dict):
         processing_tasks[task_id]['stage'] = 'Запуск обработки...'
         processing_tasks[task_id]['progress'] = 10
 
-        # Запускаем процесс
+        # Переменные окружения для unbuffered вывода
+        env = os.environ.copy()
+        env['PYTHONUNBUFFERED'] = '1'
+
+        # Запускаем процесс с UTF-8 кодировкой
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
             bufsize=1,
-            universal_newlines=True
+            encoding='utf-8',
+            errors='replace',  # Заменяем неправильные символы
+            env=env
         )
 
         processing_tasks[task_id]['process'] = process
 
         # Читаем вывод и обновляем прогресс
         output_lines = []
-        for line in process.stdout:
-            output_lines.append(line.strip())
+        error_lines = []
 
-            # Обновляем статус на основе вывода
-            if 'Транскрибация' in line:
-                processing_tasks[task_id]['stage'] = 'Транскрибация...'
-                processing_tasks[task_id]['progress'] = 20
-            elif 'Сегментация' in line:
-                processing_tasks[task_id]['stage'] = 'Сегментация...'
-                processing_tasks[task_id]['progress'] = 35
-            elif 'Суммаризация' in line or 'Summarizing' in line:
-                processing_tasks[task_id]['stage'] = 'Суммаризация...'
-                processing_tasks[task_id]['progress'] = 50
-            elif 'Мета-анализ' in line:
-                processing_tasks[task_id]['stage'] = 'Мета-анализ...'
-                processing_tasks[task_id]['progress'] = 65
-            elif 'Извлечение терминов' in line:
-                processing_tasks[task_id]['stage'] = 'Извлечение терминов...'
-                processing_tasks[task_id]['progress'] = 75
-            elif 'Генерация вопросов' in line:
-                processing_tasks[task_id]['stage'] = 'Генерация вопросов...'
-                processing_tasks[task_id]['progress'] = 85
-            elif 'Поиск статей' in line:
-                processing_tasks[task_id]['stage'] = 'Поиск статей...'
-                processing_tasks[task_id]['progress'] = 90
-            elif 'Экспорт' in line:
-                processing_tasks[task_id]['stage'] = 'Экспорт отчёта...'
-                processing_tasks[task_id]['progress'] = 95
-            elif 'ЗАВЕРШЁН' in line or 'SUCCESS' in line:
-                processing_tasks[task_id]['stage'] = 'Завершено!'
-                processing_tasks[task_id]['progress'] = 100
+        print(f"[Task {task_id}] Процесс запущен, читаем вывод...")
 
-        # Ждём завершения
+        # Читаем stdout
+        if process.stdout:
+            for line in process.stdout:
+                line_stripped = line.strip()
+                if line_stripped:  # Игнорируем пустые строки
+                    output_lines.append(line_stripped)
+                    print(f"[Task {task_id}] {line_stripped}")  # Выводим в консоль сервера для отладки
+
+                # Также ловим строки с ошибками
+                if 'error' in line_stripped.lower() or 'exception' in line_stripped.lower():
+                    error_lines.append(line_stripped)
+
+                # Обновляем статус на основе вывода (с учетом номеров этапов и английских названий)
+                if '[1/8]' in line or 'Транскрибация' in line or 'Transcription' in line or 'Transcribing' in line:
+                    processing_tasks[task_id]['stage'] = 'Транскрибация...'
+                    processing_tasks[task_id]['progress'] = 20
+                elif '[2/8]' in line or 'Сегментация' in line or 'Segmentation' in line or 'Segmenting' in line:
+                    processing_tasks[task_id]['stage'] = 'Сегментация...'
+                    processing_tasks[task_id]['progress'] = 35
+                elif '[3/8]' in line or 'Суммаризация' in line or 'Summarizing' in line or 'Summarization' in line:
+                    processing_tasks[task_id]['stage'] = 'Суммаризация...'
+                    processing_tasks[task_id]['progress'] = 50
+                elif '[4/8]' in line or 'Мета-анализ' in line or 'Meta-analysis' in line:
+                    processing_tasks[task_id]['stage'] = 'Мета-анализ...'
+                    processing_tasks[task_id]['progress'] = 65
+                elif '[5/8]' in line or 'Извлечение терминов' in line or 'Term extraction' in line or 'Extracting terms' in line:
+                    processing_tasks[task_id]['stage'] = 'Извлечение терминов...'
+                    processing_tasks[task_id]['progress'] = 75
+                elif '[6/8]' in line or 'Генерация вопросов' in line or 'Generating questions' in line or 'Question generation' in line:
+                    processing_tasks[task_id]['stage'] = 'Генерация вопросов...'
+                    processing_tasks[task_id]['progress'] = 85
+                elif '[7/8]' in line or 'Поиск статей' in line or 'Searching articles' in line or 'Article search' in line:
+                    processing_tasks[task_id]['stage'] = 'Поиск статей...'
+                    processing_tasks[task_id]['progress'] = 90
+                elif '[8/8]' in line or 'Экспорт' in line or 'Export' in line or 'Exporting' in line:
+                    processing_tasks[task_id]['stage'] = 'Экспорт отчёта...'
+                    processing_tasks[task_id]['progress'] = 95
+                elif 'ЗАВЕРШЁН' in line or 'SUCCESS' in line or 'Complete!' in line or 'Finished' in line:
+                    processing_tasks[task_id]['stage'] = 'Завершено!'
+                    processing_tasks[task_id]['progress'] = 100
+
+        # Ждём завершения и читаем stderr
+        print(f"[Task {task_id}] Процесс завершен, читаем stderr...")
         return_code = process.wait()
+        stderr_output = ""
+        if process.stderr:
+            stderr_output = process.stderr.read()
+            if stderr_output:
+                print(f"[Task {task_id}] STDERR: {stderr_output}")
+
+        print(f"[Task {task_id}] Return code: {return_code}")
 
         if return_code == 0:
             processing_tasks[task_id]['status'] = 'completed'
@@ -377,16 +405,24 @@ def run_processing(file_path: str, task_id: str, options: Dict):
             processing_tasks[task_id]['progress'] = 100
             processing_tasks[task_id]['output'] = '\n'.join(output_lines)
         else:
-            stderr = process.stderr.read()
+            # Формируем подробное сообщение об ошибке
+            error_msg = f"Процесс завершился с кодом {return_code}\n\n"
+            if stderr_output:
+                error_msg += f"STDERR:\n{stderr_output}\n\n"
+            if error_lines:
+                error_msg += f"Ошибки из лога:\n" + "\n".join(error_lines[-10:])  # Последние 10 строк с ошибками
+
             processing_tasks[task_id]['status'] = 'error'
             processing_tasks[task_id]['stage'] = 'Ошибка обработки'
-            processing_tasks[task_id]['error'] = stderr
+            processing_tasks[task_id]['error'] = error_msg
             processing_tasks[task_id]['output'] = '\n'.join(output_lines)
 
     except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
         processing_tasks[task_id]['status'] = 'error'
-        processing_tasks[task_id]['stage'] = 'Ошибка'
-        processing_tasks[task_id]['error'] = str(e)
+        processing_tasks[task_id]['stage'] = 'Ошибка при выполнении'
+        processing_tasks[task_id]['error'] = f"Exception: {str(e)}\n\nTraceback:\n{error_trace}"
 
 
 @app.route('/api/process/start', methods=['POST'])
