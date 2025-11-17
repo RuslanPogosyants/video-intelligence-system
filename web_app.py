@@ -8,6 +8,7 @@ import json
 from datetime import datetime
 from typing import Dict, List, Optional
 import os
+import sys
 import subprocess
 import threading
 import time
@@ -296,7 +297,7 @@ def run_processing(file_path: str, task_id: str, options: Dict):
 
         # Формируем команду
         cmd = [
-            'python', '-m', 'src.cli', 'process-all',
+            sys.executable, '-m', 'src.cli', 'process-all',
             file_path,
             '--language', options.get('language', 'ru'),
             '--model', options.get('model', 'base'),
