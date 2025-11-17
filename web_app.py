@@ -393,9 +393,13 @@ def run_processing(file_path: str, task_id: str, options: Dict):
         return_code = process.wait()
         stderr_output = ""
         if process.stderr:
-            stderr_output = process.stderr.read()
-            if stderr_output:
-                print(f"[Task {task_id}] STDERR: {stderr_output}")
+            try:
+                stderr_output = process.stderr.read()
+                if stderr_output:
+                    print(f"[Task {task_id}] STDERR: {stderr_output}")
+            except Exception as e:
+                print(f"[Task {task_id}] Failed to read stderr: {e}")
+                stderr_output = ""
 
         print(f"[Task {task_id}] Return code: {return_code}")
 
