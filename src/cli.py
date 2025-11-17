@@ -246,7 +246,11 @@ def process_all(video, model, language, device, output_dir, enable_scraping, ski
             if with_answers:
                 click.echo("   ✅ Генерация ответов и объяснений включена")
             generator = QuestionGenerator(use_model=False, use_llm=use_llm)
-            questions = generator.process_summaries_file(summaries_path, with_answers=with_answers)
+            questions = generator.process_summaries_file(
+                summaries_path,
+                num_questions=20,
+                with_answers=with_answers
+            )
         else:
             click.echo("\n[6/8] ⏭️  Пропускаем генерацию вопросов")
 
