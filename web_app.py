@@ -295,9 +295,9 @@ def run_processing(file_path: str, task_id: str, options: Dict):
         processing_tasks[task_id]['stage'] = 'Подготовка...'
         processing_tasks[task_id]['progress'] = 5
 
-        # Формируем команду
+        # Формируем команду с unbuffered режимом (-u флаг)
         cmd = [
-            sys.executable, '-m', 'src.cli', 'process-all',
+            sys.executable, '-u', '-m', 'src.cli', 'process-all',
             file_path,
             '--language', options.get('language', 'ru'),
             '--model', options.get('model', 'base'),
@@ -323,6 +323,10 @@ def run_processing(file_path: str, task_id: str, options: Dict):
         processing_tasks[task_id]['stage'] = 'Запуск обработки...'
         processing_tasks[task_id]['progress'] = 10
 
+        # Переменные окружения для unbuffered вывода
+        env = os.environ.copy()
+        env['PYTHONUNBUFFERED'] = '1'
+
         # Запускаем процесс
         process = subprocess.Popen(
             cmd,
@@ -330,7 +334,8 @@ def run_processing(file_path: str, task_id: str, options: Dict):
             stderr=subprocess.PIPE,
             text=True,
             bufsize=1,
-            universal_newlines=True
+            universal_newlines=True,
+            env=env
         )
 
         processing_tasks[task_id]['process'] = process
@@ -339,11 +344,15 @@ def run_processing(file_path: str, task_id: str, options: Dict):
         output_lines = []
         error_lines = []
 
+        print(f"[Task {task_id}] Процесс запущен, читаем вывод...")
+
         # Читаем stdout
         if process.stdout:
             for line in process.stdout:
                 line_stripped = line.strip()
-                output_lines.append(line_stripped)
+                if line_stripped:  # Игнорируем пустые строки
+                    output_lines.append(line_stripped)
+                    print(f"[Task {task_id}] {line_stripped}")  # Выводим в консоль сервера для отладки
 
                 # Также ловим строки с ошибками
                 if 'error' in line_stripped.lower() or 'exception' in line_stripped.lower():
@@ -379,10 +388,15 @@ def run_processing(file_path: str, task_id: str, options: Dict):
                     processing_tasks[task_id]['progress'] = 100
 
         # Ждём завершения и читаем stderr
+        print(f"[Task {task_id}] Процесс завершен, читаем stderr...")
         return_code = process.wait()
         stderr_output = ""
         if process.stderr:
             stderr_output = process.stderr.read()
+            if stderr_output:
+                print(f"[Task {task_id}] STDERR: {stderr_output}")
+
+        print(f"[Task {task_id}] Return code: {return_code}")
 
         if return_code == 0:
             processing_tasks[task_id]['status'] = 'completed'
