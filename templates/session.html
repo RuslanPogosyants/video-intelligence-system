@@ -1,0 +1,561 @@
+{% extends "base.html" %}
+
+{% block title %}{{ data.id }} - Video Intelligence System{% endblock %}
+
+{% block content %}
+<!-- Хлебные крошки -->
+<nav aria-label="breadcrumb" class="mb-4">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="/" style="color: white; text-decoration: none;"><i class="bi bi-house"></i> Главная</a></li>
+        <li class="breadcrumb-item active" style="color: white;">{{ data.id }}</li>
+    </ol>
+</nav>
+
+<!-- Заголовок и основная информация -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <i class="bi bi-camera-video"></i> {{ data.checkpoint.video_source|truncate(80) }}
+                    </div>
+                    <div>
+                        {% if data.checkpoint.stage == 'export_complete' %}
+                            <span class="badge bg-success">
+                                <i class="bi bi-check-circle"></i> Обработка завершена
+                            </span>
+                        {% else %}
+                            <span class="badge bg-warning">
+                                <i class="bi bi-hourglass-split"></i> {{ data.checkpoint.stage }}
+                            </span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            <div class="card-body">
+                <small class="text-muted">
+                    <i class="bi bi-calendar"></i> {{ data.checkpoint.timestamp|format_datetime }}
+                    <span class="ms-3">
+                        <i class="bi bi-folder"></i> {{ data.id }}
+                    </span>
+                </small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Статистика -->
+{% if data.final_summary and data.final_summary.statistics %}
+<div class="row mb-4">
+    {% set stats = data.final_summary.statistics %}
+    <div class="col-md-3">
+        <div class="stat-card">
+            <i class="bi bi-clock-history" style="font-size: 2rem;"></i>
+            <div class="stat-value">{{ stats.total_duration_seconds|format_time }}</div>
+            <div class="stat-label">Длительность</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+            <i class="bi bi-file-text" style="font-size: 2rem;"></i>
+            <div class="stat-value">{{ stats.num_segments }}</div>
+            <div class="stat-label">Сегментов</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+            <i class="bi bi-chat-text" style="font-size: 2rem;"></i>
+            <div class="stat-value">{{ "{:,}".format(stats.total_words).replace(',', ' ') }}</div>
+            <div class="stat-label">Слов</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">
+            <i class="bi bi-speedometer" style="font-size: 2rem;"></i>
+            <div class="stat-value">{{ "%.0f"|format(stats.words_per_minute) }}</div>
+            <div class="stat-label">Слов/мин</div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Навигация по табам -->
+<ul class="nav nav-pills mb-4" id="contentTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="overview-tab" data-bs-toggle="pill" data-bs-target="#overview" type="button">
+            <i class="bi bi-info-circle"></i> Обзор
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="transcript-tab" data-bs-toggle="pill" data-bs-target="#transcript" type="button">
+            <i class="bi bi-file-text"></i> Транскрипция
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="segments-tab" data-bs-toggle="pill" data-bs-target="#segments" type="button">
+            <i class="bi bi-collection"></i> Сегменты
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="summary-tab" data-bs-toggle="pill" data-bs-target="#summary" type="button">
+            <i class="bi bi-lightning"></i> Суммаризация
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="terms-tab" data-bs-toggle="pill" data-bs-target="#terms" type="button">
+            <i class="bi bi-book"></i> Термины
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="questions-tab" data-bs-toggle="pill" data-bs-target="#questions" type="button">
+            <i class="bi bi-question-circle"></i> Вопросы
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="articles-tab" data-bs-toggle="pill" data-bs-target="#articles" type="button">
+            <i class="bi bi-link-45deg"></i> Статьи
+        </button>
+    </li>
+</ul>
+
+<!-- Содержимое табов -->
+<div class="tab-content" id="contentTabsContent">
+    <!-- Обзор -->
+    <div class="tab-pane fade show active" id="overview" role="tabpanel">
+        {% if data.final_summary %}
+        <div class="card mb-4">
+            <div class="card-header">
+                <i class="bi bi-stars"></i> Общий обзор
+            </div>
+            <div class="card-body">
+                <div class="alert alert-primary" role="alert" style="background: linear-gradient(135deg, #e0e7ff 0%, #f3e8ff 100%); border: none;">
+                    <h5><i class="bi bi-journal-text"></i> Суммаризация всего видео:</h5>
+                    <p class="mb-0 mt-3">{{ data.final_summary.overview }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Ключевые тезисы -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <i class="bi bi-bookmark-star"></i> Ключевые тезисы
+            </div>
+            <div class="card-body">
+                <ul class="list-group list-group-flush">
+                    {% for point in data.final_summary.key_points %}
+                    <li class="list-group-item">
+                        <i class="bi bi-check2-circle text-success me-2"></i>
+                        {{ point }}
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+
+        <!-- Основные темы -->
+        {% if data.final_summary.main_topics %}
+        <div class="card mb-4">
+            <div class="card-header">
+                <i class="bi bi-tags"></i> Основные темы
+            </div>
+            <div class="card-body">
+                {% for topic in data.final_summary.main_topics %}
+                <span class="term-badge">{{ topic }}</span>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Временная шкала -->
+        {% if data.final_summary.timeline %}
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-clock-history"></i> Временная шкала
+            </div>
+            <div class="card-body">
+                {% for item in data.final_summary.timeline[:10] %}
+                <div class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <div>
+                        <span class="timestamp">{{ item.timestamp }}</span>
+                        <p class="mt-2 mb-0">{{ item.title }}</p>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+        {% else %}
+        <div class="alert alert-warning">
+            <i class="bi bi-exclamation-triangle"></i> Финальная суммаризация недоступна
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Транскрипция -->
+    <div class="tab-pane fade" id="transcript" role="tabpanel">
+        {% if data.transcript %}
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-mic"></i> Полная транскрипция
+                <span class="badge bg-light text-dark ms-2">
+                    {{ data.transcript.language|upper }}
+                </span>
+                <span class="badge bg-light text-dark ms-2">
+                    {{ data.transcript.segments|length }} сегментов
+                </span>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <small class="text-muted">
+                        <i class="bi bi-clock"></i> Длительность: <strong>{{ data.transcript.duration|format_time }}</strong>
+                        <span class="ms-3">
+                            <i class="bi bi-cpu"></i> Время транскрибации: <strong>{{ "%.1f"|format(data.transcript.transcription_time) }}с</strong>
+                        </span>
+                        <span class="ms-3">
+                            <i class="bi bi-speedometer2"></i> RTF: <strong>{{ "%.2f"|format(data.transcript.rtf) }}x</strong>
+                        </span>
+                    </small>
+                </div>
+
+                <div class="accordion" id="transcriptAccordion">
+                    {% for seg in data.transcript.segments[:50] %}
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#seg{{ seg.id }}">
+                                <span class="timestamp me-3">{{ seg.start|format_time }}</span>
+                                {{ seg.text[:100] }}...
+                            </button>
+                        </h2>
+                        <div id="seg{{ seg.id }}" class="accordion-collapse collapse" data-bs-parent="#transcriptAccordion">
+                            <div class="accordion-body">
+                                <p>{{ seg.text }}</p>
+                                <small class="text-muted">
+                                    Время: {{ seg.start|format_time }} - {{ seg.end|format_time }}
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="alert alert-warning">
+            <i class="bi bi-exclamation-triangle"></i> Транскрипция недоступна
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Сегменты -->
+    <div class="tab-pane fade" id="segments" role="tabpanel">
+        {% if data.summaries %}
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-collection"></i> Семантические сегменты
+                <span class="badge bg-light text-dark ms-2">
+                    {{ data.summaries.segments|length }} сегментов
+                </span>
+            </div>
+            <div class="card-body">
+                {% for seg in data.summaries.segments %}
+                <div class="segment-card">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <h5 class="mb-0">
+                            <i class="bi bi-bookmark"></i> Сегмент {{ seg.id + 1 }}
+                        </h5>
+                        <span class="timestamp">{{ seg.start|format_time }}</span>
+                    </div>
+
+                    <div class="alert alert-success mt-3" style="background: #d1fae5; border: none; border-left: 4px solid #10b981;">
+                        <strong><i class="bi bi-lightning-charge"></i> Суммаризация:</strong>
+                        <p class="mb-0 mt-2">{{ seg.summary }}</p>
+                    </div>
+
+                    <details class="mt-3">
+                        <summary class="text-muted" style="cursor: pointer;">
+                            <i class="bi bi-eye"></i> Показать полный текст
+                        </summary>
+                        <div class="mt-2 p-3" style="background: #f9fafb; border-radius: 8px;">
+                            {{ seg.text }}
+                        </div>
+                    </details>
+
+                    <div class="mt-2">
+                        <small class="text-muted">
+                            <i class="bi bi-rulers"></i> Compression: {{ "%.1f"|format(seg.compression_ratio) }}x
+                            <span class="ms-2">
+                                <i class="bi bi-chat-left-text"></i> {{ seg.num_sentences }} предложений
+                            </span>
+                        </small>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% else %}
+        <div class="alert alert-warning">
+            <i class="bi bi-exclamation-triangle"></i> Сегменты недоступны
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Суммаризация -->
+    <div class="tab-pane fade" id="summary" role="tabpanel">
+        {% if data.summaries %}
+        <div class="card mb-4">
+            <div class="card-header">
+                <i class="bi bi-stars"></i> Мета-суммаризация
+            </div>
+            <div class="card-body">
+                <div class="alert alert-primary" style="background: linear-gradient(135deg, #e0e7ff 0%, #f3e8ff 100%); border: none; font-size: 1.1rem;">
+                    {{ data.summaries.meta_summary }}
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-list-check"></i> Ключевые тезисы
+            </div>
+            <div class="card-body">
+                {% for point in data.summaries.key_points %}
+                <div class="alert alert-light border-start border-4 border-primary">
+                    <strong>{{ loop.index }}.</strong> {{ point }}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% else %}
+        <div class="alert alert-warning">
+            <i class="bi bi-exclamation-triangle"></i> Суммаризация недоступна
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Термины -->
+    <div class="tab-pane fade" id="terms" role="tabpanel">
+        {% if data.terms %}
+        <div class="card mb-4">
+            <div class="card-header">
+                <i class="bi bi-bookmark-star"></i> Технические термины
+                <span class="badge bg-light text-dark ms-2">
+                    {{ data.terms.glossary.technical_terms|length }} терминов
+                </span>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    {% for term in data.terms.glossary.technical_terms[:50] %}
+                    <div class="col-md-6 mb-3">
+                        <div class="d-flex justify-content-between align-items-center p-3" style="background: #f9fafb; border-radius: 8px; border-left: 4px solid var(--primary-color);">
+                            <strong>{{ term.term }}</strong>
+                            <span class="badge bg-primary">{{ term.frequency }}</span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Именованные сущности -->
+        <div class="row">
+            {% if data.terms.glossary.named_entities.persons %}
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                        <i class="bi bi-person"></i> Персоны
+                    </div>
+                    <div class="card-body">
+                        {% for person in data.terms.glossary.named_entities.persons %}
+                        <span class="badge bg-secondary m-1">{{ person }}</span>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if data.terms.glossary.named_entities.organizations %}
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                        <i class="bi bi-building"></i> Организации
+                    </div>
+                    <div class="card-body">
+                        {% for org in data.terms.glossary.named_entities.organizations %}
+                        <span class="badge bg-secondary m-1">{{ org }}</span>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if data.terms.glossary.named_entities.locations %}
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                        <i class="bi bi-geo-alt"></i> Локации
+                    </div>
+                    <div class="card-body">
+                        {% for loc in data.terms.glossary.named_entities.locations %}
+                        <span class="badge bg-secondary m-1">{{ loc }}</span>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        {% else %}
+        <div class="alert alert-warning">
+            <i class="bi bi-exclamation-triangle"></i> Термины недоступны
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Вопросы -->
+    <div class="tab-pane fade" id="questions" role="tabpanel">
+        {% if data.questions %}
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-patch-question"></i> Вопросы для самопроверки
+                <span class="badge bg-light text-dark ms-2">
+                    {{ data.questions.total_questions }} вопросов
+                </span>
+            </div>
+            <div class="card-body">
+                <!-- Фильтры по сложности -->
+                <div class="btn-group mb-4" role="group">
+                    <button type="button" class="btn btn-outline-primary active" data-filter="all">
+                        Все вопросы
+                    </button>
+                    <button type="button" class="btn btn-outline-success" data-filter="easy">
+                        Легкие
+                    </button>
+                    <button type="button" class="btn btn-outline-warning" data-filter="medium">
+                        Средние
+                    </button>
+                    <button type="button" class="btn btn-outline-danger" data-filter="hard">
+                        Сложные
+                    </button>
+                </div>
+
+                {% for question in data.questions.questions %}
+                <div class="question-card question-item" data-difficulty="{{ question.difficulty }}">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <h5 class="mb-0">
+                            <i class="bi bi-question-circle"></i> Вопрос {{ loop.index }}
+                        </h5>
+                        <div>
+                            {% if question.difficulty == 'easy' %}
+                                <span class="badge bg-success">Легкий</span>
+                            {% elif question.difficulty == 'medium' %}
+                                <span class="badge bg-warning">Средний</span>
+                            {% elif question.difficulty == 'hard' %}
+                                <span class="badge bg-danger">Сложный</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <p class="mt-3 mb-2" style="font-size: 1.1rem;">{{ question.question }}</p>
+
+                    <!-- Phase 3: Показываем ответ и объяснение -->
+                    {% if question.answer %}
+                    <div class="alert alert-success mt-3" style="background: #d1fae5; border: none; border-left: 4px solid #10b981;">
+                        <strong><i class="bi bi-check-circle"></i> Правильный ответ:</strong>
+                        <p class="mb-0 mt-2">{{ question.answer }}</p>
+                    </div>
+                    {% endif %}
+
+                    {% if question.explanation %}
+                    <div class="alert alert-info mt-2" style="background: #dbeafe; border: none; border-left: 4px solid #3b82f6;">
+                        <strong><i class="bi bi-lightbulb"></i> Объяснение:</strong>
+                        <p class="mb-0 mt-2">{{ question.explanation }}</p>
+                    </div>
+                    {% endif %}
+
+                    {% if question.timestamp is defined %}
+                    <small class="text-muted">
+                        <i class="bi bi-clock"></i> Таймкод: <span class="timestamp">{{ question.timestamp|format_time }}</span>
+                    </small>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% else %}
+        <div class="alert alert-warning">
+            <i class="bi bi-exclamation-triangle"></i> Вопросы недоступны
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Статьи -->
+    <div class="tab-pane fade" id="articles" role="tabpanel">
+        {% if data.articles %}
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-link-45deg"></i> Рекомендуемые материалы
+                <span class="badge bg-light text-dark ms-2">
+                    {{ data.articles.total_articles }} статей
+                </span>
+            </div>
+            <div class="card-body">
+                {% for article in data.articles.articles %}
+                <div class="article-card">
+                    <h5>
+                        <a href="{{ article.url }}" target="_blank" style="text-decoration: none;">
+                            {{ article.title }}
+                            <i class="bi bi-box-arrow-up-right ms-2" style="font-size: 0.8rem;"></i>
+                        </a>
+                    </h5>
+                    <p class="text-muted mb-2">
+                        <i class="bi bi-building"></i> {{ article.source }}
+                        {% if article.topic %}
+                        <span class="ms-2">
+                            <i class="bi bi-tag"></i> {{ article.topic }}
+                        </span>
+                        {% endif %}
+                        {% if article.relevance_score %}
+                        <span class="ms-2">
+                            <i class="bi bi-star-fill text-warning"></i> {{ "%.2f"|format(article.relevance_score) }}
+                        </span>
+                        {% endif %}
+                    </p>
+                    {% if article.snippet %}
+                    <p class="text-muted">{{ article.snippet[:200] }}...</p>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% else %}
+        <div class="alert alert-warning">
+            <i class="bi bi-exclamation-triangle"></i> Статьи недоступны
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Фильтрация вопросов по сложности
+document.querySelectorAll('[data-filter]').forEach(button => {
+    button.addEventListener('click', function() {
+        const filter = this.dataset.filter;
+
+        // Обновляем активную кнопку
+        document.querySelectorAll('[data-filter]').forEach(btn => btn.classList.remove('active'));
+        this.classList.add('active');
+
+        // Фильтруем вопросы
+        document.querySelectorAll('.question-item').forEach(item => {
+            if (filter === 'all' || item.dataset.difficulty === filter) {
+                item.style.display = 'block';
+            } else {
+                item.style.display = 'none';
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

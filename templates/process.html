@@ -1,0 +1,501 @@
+{% extends "base.html" %}
+
+{% block title %}Обработка файлов - Video Intelligence System{% endblock %}
+
+{% block content %}
+<!-- Хлебные крошки -->
+<nav aria-label="breadcrumb" class="mb-4">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="/" style="color: white; text-decoration: none;"><i class="bi bi-house"></i> Главная</a></li>
+        <li class="breadcrumb-item active" style="color: white;">Обработка файлов</li>
+    </ol>
+</nav>
+
+<!-- Заголовок -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-gear-fill"></i> Обработка новых файлов
+            </div>
+            <div class="card-body text-center py-4">
+                <h4>Выберите аудио/видео файл для обработки</h4>
+                <p class="text-muted">Система автоматически транскрибирует, сегментирует, суммаризирует и проанализирует содержимое</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Табы: Выбор файла или загрузка -->
+<div class="row mb-4">
+    <div class="col-12">
+        <ul class="nav nav-pills mb-3" id="fileTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="select-tab" data-bs-toggle="pill" data-bs-target="#select" type="button">
+                    <i class="bi bi-folder2-open"></i> Выбрать из artifacts
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="upload-tab" data-bs-toggle="pill" data-bs-target="#upload" type="button">
+                    <i class="bi bi-cloud-upload"></i> Загрузить новый файл
+                </button>
+            </li>
+        </ul>
+
+        <div class="tab-content" id="fileTabsContent">
+            <!-- Выбор существующего файла -->
+            <div class="tab-pane fade show active" id="select" role="tabpanel">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-music-note-list"></i> Доступные файлы в папке artifacts
+                    </div>
+                    <div class="card-body">
+                        {% if audio_files %}
+                            <div class="list-group" id="audioFilesList">
+                                {% for file in audio_files %}
+                                <div class="list-group-item list-group-item-action audio-file-item"
+                                     data-path="{{ file.full_path }}"
+                                     style="cursor: pointer; transition: all 0.3s ease;">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div class="d-flex align-items-center">
+                                            <i class="bi bi-file-earmark-music fs-3 me-3" style="color: var(--primary-color);"></i>
+                                            <div>
+                                                <h6 class="mb-1">{{ file.name }}</h6>
+                                                <small class="text-muted">
+                                                    <i class="bi bi-hdd"></i> {{ file.size_mb }} MB
+                                                    <span class="ms-3">
+                                                        <i class="bi bi-calendar"></i> {{ file.modified|format_datetime }}
+                                                    </span>
+                                                </small>
+                                            </div>
+                                        </div>
+                                        <i class="bi bi-check-circle text-success fs-3" style="display: none;"></i>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            <div class="alert alert-info" role="alert">
+                                <i class="bi bi-info-circle"></i>
+                                Нет доступных аудио/видео файлов в папке artifacts
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Загрузка нового файла -->
+            <div class="tab-pane fade" id="upload" role="tabpanel">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-cloud-upload"></i> Загрузить файл
+                    </div>
+                    <div class="card-body">
+                        <div class="upload-area p-5 text-center" id="uploadArea"
+                             style="border: 3px dashed #dee2e6; border-radius: 16px; background: #f8f9fa; cursor: pointer; transition: all 0.3s ease;">
+                            <i class="bi bi-cloud-arrow-up" style="font-size: 4rem; color: var(--primary-color);"></i>
+                            <h5 class="mt-3">Перетащите файл сюда или нажмите для выбора</h5>
+                            <p class="text-muted">Поддерживаемые форматы: WAV, MP3, MP4, M4A, AVI, MKV (макс. 500MB)</p>
+                            <input type="file" id="fileInput" accept=".wav,.mp3,.mp4,.m4a,.avi,.mkv" style="display: none;">
+                        </div>
+
+                        <div id="uploadProgress" class="mt-4" style="display: none;">
+                            <div class="progress" style="height: 30px;">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated"
+                                     role="progressbar"
+                                     style="width: 0%;"
+                                     id="uploadProgressBar">0%</div>
+                            </div>
+                            <p class="text-center mt-2" id="uploadStatus">Загрузка...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Опции обработки -->
+<div class="row mb-4" id="processingOptions" style="display: none;">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-sliders"></i> Параметры обработки
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label for="languageSelect" class="form-label">
+                            <i class="bi bi-translate"></i> Язык
+                        </label>
+                        <select class="form-select" id="languageSelect">
+                            <option value="ru" selected>Русский</option>
+                            <option value="en">English</option>
+                            <option value="uk">Українська</option>
+                            <option value="es">Español</option>
+                            <option value="fr">Français</option>
+                            <option value="de">Deutsch</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-4 mb-3">
+                        <label for="modelSelect" class="form-label">
+                            <i class="bi bi-cpu"></i> Модель Whisper
+                        </label>
+                        <select class="form-select" id="modelSelect">
+                            <option value="tiny">Tiny (самая быстрая)</option>
+                            <option value="base" selected>Base (рекомендуется)</option>
+                            <option value="small">Small (лучшее качество)</option>
+                            <option value="medium">Medium (высокое качество)</option>
+                            <option value="large">Large (максимальное качество)</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-4 mb-3">
+                        <label for="deviceSelect" class="form-label">
+                            <i class="bi bi-hdd"></i> Устройство
+                        </label>
+                        <select class="form-select" id="deviceSelect">
+                            <option value="auto" selected>Автоопределение</option>
+                            <option value="cuda">CUDA (GPU)</option>
+                            <option value="cpu">CPU</option>
+                        </select>
+                    </div>
+
+                    <!-- Phase 3: Новые чекбоксы для LLM и KeyBERT -->
+                    <div class="col-md-6 mb-3">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="useLLM" checked>
+                            <label class="form-check-label" for="useLLM">
+                                <i class="bi bi-robot"></i> Использовать LLM (GigaChat) для качественной генерации
+                            </label>
+                            <small class="form-text text-muted d-block">Улучшает качество суммаризаций, вопросов и ключевых тезисов</small>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 mb-3">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="useKeyBERT" checked>
+                            <label class="form-check-label" for="useKeyBERT">
+                                <i class="bi bi-key"></i> Использовать KeyBERT для извлечения ключевых слов
+                            </label>
+                            <small class="form-text text-muted d-block">Семантическое извлечение ключевых понятий</small>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 mb-3">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="withAnswers" checked>
+                            <label class="form-check-label" for="withAnswers">
+                                <i class="bi bi-patch-check"></i> Генерировать ответы и объяснения к вопросам
+                            </label>
+                            <small class="form-text text-muted d-block">Создаёт полноценные вопросы с правильными ответами</small>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 mb-3">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="skipQuestions">
+                            <label class="form-check-label" for="skipQuestions">
+                                <i class="bi bi-question-circle"></i> Пропустить генерацию вопросов
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 mb-3">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="skipArticles">
+                            <label class="form-check-label" for="skipArticles">
+                                <i class="bi bi-link-45deg"></i> Пропустить поиск статей
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Кнопка запуска обработки -->
+<div class="row mb-4" id="startProcessingSection" style="display: none;">
+    <div class="col-12 text-center">
+        <button class="btn btn-primary btn-lg" id="startProcessingBtn" style="padding: 1rem 3rem;">
+            <i class="bi bi-play-circle"></i> Начать обработку
+        </button>
+    </div>
+</div>
+
+<!-- Прогресс обработки -->
+<div class="row" id="processingProgressSection" style="display: none;">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-hourglass-split"></i> Обработка...
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <h5 id="processingStage">Инициализация...</h5>
+                    <div class="progress" style="height: 30px;">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated"
+                             role="progressbar"
+                             style="width: 0%;"
+                             id="processingProgressBar">0%</div>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <small class="text-muted">
+                            <i class="bi bi-clock"></i> Прошло времени: <span id="elapsedTime">0с</span>
+                        </small>
+                    </div>
+                    <button class="btn btn-danger btn-sm" id="cancelProcessingBtn">
+                        <i class="bi bi-x-circle"></i> Отменить
+                    </button>
+                </div>
+
+                <div class="mt-3">
+                    <details>
+                        <summary class="text-muted" style="cursor: pointer;">
+                            <i class="bi bi-terminal"></i> Показать лог
+                        </summary>
+                        <pre class="mt-2 p-3" style="background: #1e1e1e; color: #d4d4d4; border-radius: 8px; max-height: 300px; overflow-y: auto;" id="processingLog"></pre>
+                    </details>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Результат -->
+<div class="row" id="processingResultSection" style="display: none;">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-success text-white">
+                <i class="bi bi-check-circle"></i> Обработка завершена!
+            </div>
+            <div class="card-body text-center py-5">
+                <i class="bi bi-check-circle text-success" style="font-size: 5rem;"></i>
+                <h3 class="mt-3">Файл успешно обработан!</h3>
+                <p class="text-muted">Все результаты сохранены и готовы к просмотру</p>
+                <div class="mt-4">
+                    <a href="/" class="btn btn-primary btn-lg me-2">
+                        <i class="bi bi-list"></i> К списку видео
+                    </a>
+                    <button class="btn btn-outline-primary btn-lg" id="processAnotherBtn">
+                        <i class="bi bi-arrow-repeat"></i> Обработать ещё
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let selectedFilePath = null;
+let currentTaskId = null;
+let statusCheckInterval = null;
+
+// Выбор файла из списка
+document.querySelectorAll('.audio-file-item').forEach(item => {
+    item.addEventListener('click', function() {
+        // Убираем выделение со всех
+        document.querySelectorAll('.audio-file-item').forEach(el => {
+            el.classList.remove('border-primary');
+            el.style.borderWidth = '1px';
+            el.querySelector('.bi-check-circle').style.display = 'none';
+        });
+
+        // Выделяем выбранный
+        this.classList.add('border-primary');
+        this.style.borderWidth = '3px';
+        this.querySelector('.bi-check-circle').style.display = 'block';
+
+        selectedFilePath = this.dataset.path;
+
+        // Показываем опции и кнопку
+        document.getElementById('processingOptions').style.display = 'block';
+        document.getElementById('startProcessingSection').style.display = 'block';
+    });
+});
+
+// Загрузка файла
+const uploadArea = document.getElementById('uploadArea');
+const fileInput = document.getElementById('fileInput');
+
+uploadArea.addEventListener('click', () => fileInput.click());
+
+uploadArea.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    uploadArea.style.borderColor = 'var(--primary-color)';
+    uploadArea.style.background = '#e7f3ff';
+});
+
+uploadArea.addEventListener('dragleave', () => {
+    uploadArea.style.borderColor = '#dee2e6';
+    uploadArea.style.background = '#f8f9fa';
+});
+
+uploadArea.addEventListener('drop', (e) => {
+    e.preventDefault();
+    uploadArea.style.borderColor = '#dee2e6';
+    uploadArea.style.background = '#f8f9fa';
+
+    const file = e.dataTransfer.files[0];
+    if (file) {
+        uploadFile(file);
+    }
+});
+
+fileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) {
+        uploadFile(file);
+    }
+});
+
+function uploadFile(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    document.getElementById('uploadProgress').style.display = 'block';
+
+    fetch('/upload', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById('uploadProgressBar').style.width = '100%';
+            document.getElementById('uploadProgressBar').textContent = '100%';
+            document.getElementById('uploadStatus').textContent = 'Загрузка завершена!';
+
+            selectedFilePath = data.path;
+
+            // Показываем опции
+            setTimeout(() => {
+                document.getElementById('processingOptions').style.display = 'block';
+                document.getElementById('startProcessingSection').style.display = 'block';
+            }, 500);
+        } else {
+            alert('Ошибка загрузки: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Ошибка загрузки файла');
+    });
+}
+
+// Запуск обработки
+document.getElementById('startProcessingBtn').addEventListener('click', function() {
+    if (!selectedFilePath) {
+        alert('Выберите файл для обработки');
+        return;
+    }
+
+    const options = {
+        file_path: selectedFilePath,
+        language: document.getElementById('languageSelect').value,
+        model: document.getElementById('modelSelect').value,
+        device: document.getElementById('deviceSelect').value,
+        skip_questions: document.getElementById('skipQuestions').checked,
+        skip_articles: document.getElementById('skipArticles').checked,
+        // Phase 3: Новые опции
+        use_llm: document.getElementById('useLLM').checked,
+        use_keybert: document.getElementById('useKeyBERT').checked,
+        with_answers: document.getElementById('withAnswers').checked
+    };
+
+    // Скрываем кнопку, показываем прогресс
+    document.getElementById('startProcessingSection').style.display = 'none';
+    document.getElementById('processingProgressSection').style.display = 'block';
+
+    fetch('/api/process/start', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(options)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            currentTaskId = data.task_id;
+            startStatusPolling();
+        } else {
+            alert('Ошибка запуска: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Ошибка запуска обработки');
+    });
+});
+
+// Отслеживание статуса
+function startStatusPolling() {
+    statusCheckInterval = setInterval(() => {
+        fetch(`/api/process/status/${currentTaskId}`)
+        .then(response => response.json())
+        .then(data => {
+            updateProgressUI(data);
+
+            if (data.status === 'completed') {
+                clearInterval(statusCheckInterval);
+                showCompletionUI();
+            } else if (data.status === 'error') {
+                clearInterval(statusCheckInterval);
+                showErrorUI(data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Status check error:', error);
+        });
+    }, 1000);
+}
+
+function updateProgressUI(data) {
+    document.getElementById('processingStage').textContent = data.stage;
+    document.getElementById('processingProgressBar').style.width = data.progress + '%';
+    document.getElementById('processingProgressBar').textContent = Math.round(data.progress) + '%';
+    document.getElementById('elapsedTime').textContent = Math.round(data.elapsed) + 'с';
+
+    if (data.output) {
+        document.getElementById('processingLog').textContent = data.output;
+    }
+}
+
+function showCompletionUI() {
+    document.getElementById('processingProgressSection').style.display = 'none';
+    document.getElementById('processingResultSection').style.display = 'block';
+}
+
+function showErrorUI(error) {
+    alert('Ошибка обработки: ' + error);
+    location.reload();
+}
+
+// Отмена обработки
+document.getElementById('cancelProcessingBtn').addEventListener('click', function() {
+    if (confirm('Вы уверены, что хотите отменить обработку?')) {
+        fetch(`/api/process/cancel/${currentTaskId}`, {
+            method: 'POST'
+        })
+        .then(() => {
+            clearInterval(statusCheckInterval);
+            location.reload();
+        });
+    }
+});
+
+// Обработать ещё один файл
+document.getElementById('processAnotherBtn').addEventListener('click', function() {
+    location.reload();
+});
+</script>
+{% endblock %}

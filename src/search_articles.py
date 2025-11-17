@@ -89,8 +89,19 @@ class ArticleSearcher:
             "format": "json"
         }
 
+        # Правильный User-Agent для Wikipedia API
+        headers = {
+            'User-Agent': 'VideoIntelligenceSystem/1.0 (Educational project; https://github.com/video-intelligence) Python-requests'
+        }
+
         try:
-            response = requests.get(api_url, params=search_params, timeout=10)
+            # Делаем запрос с правильным User-Agent
+            response = requests.get(
+                api_url,
+                params=search_params,
+                headers=headers,
+                timeout=15
+            )
             response.raise_for_status()
             data = response.json()
 
@@ -111,9 +122,16 @@ class ArticleSearcher:
                     "page_id": page_id
                 })
 
-            time.sleep(self.rate_limit_delay)
+            # Увеличенная задержка для соблюдения rate limits
+            time.sleep(self.rate_limit_delay + 1)
             return results
 
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 403:
+                print(f"[WARN] Wikipedia API blocked request (403). Try again later or check User-Agent.")
+            else:
+                print(f"[WARN] Wikipedia search failed with HTTP {e.response.status_code}: {e}")
+            return []
         except Exception as e:
             print(f"[WARN] Wikipedia search failed: {e}")
             return []

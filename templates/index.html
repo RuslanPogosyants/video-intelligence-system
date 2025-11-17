@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+
+{% block title %}Обработанные видео - Video Intelligence System{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body text-center py-5">
+                <i class="bi bi-camera-video" style="font-size: 3rem; color: var(--primary-color);"></i>
+                <h1 class="mt-3 mb-2">Video Intelligence System</h1>
+                <p class="text-muted">Интеллектуальный анализ образовательных видео с помощью AI</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Статистика -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="stat-card">
+            <i class="bi bi-collection-play" style="font-size: 2rem;"></i>
+            <div class="stat-value">{{ sessions|length }}</div>
+            <div class="stat-label">Обработано видео</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+            <i class="bi bi-cpu" style="font-size: 2rem;"></i>
+            <div class="stat-value">AI</div>
+            <div class="stat-label">Powered</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+            <i class="bi bi-translate" style="font-size: 2rem;"></i>
+            <div class="stat-value">RU</div>
+            <div class="stat-label">Язык</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">
+            <i class="bi bi-lightning-charge" style="font-size: 2rem;"></i>
+            <div class="stat-value">8</div>
+            <div class="stat-label">Этапов анализа</div>
+        </div>
+    </div>
+</div>
+
+<!-- Кнопка обработки нового видео -->
+<div class="row mb-4">
+    <div class="col-12 text-center">
+        <a href="/process" class="btn btn-primary btn-lg" style="padding: 1rem 3rem; font-size: 1.2rem;">
+            <i class="bi bi-plus-circle"></i> Обработать новое видео
+        </a>
+    </div>
+</div>
+
+<!-- Список обработанных видео -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <div>
+                    <i class="bi bi-list-ul"></i> Обработанные видео
+                </div>
+                <a href="/process" class="btn btn-sm btn-light">
+                    <i class="bi bi-plus"></i> Добавить
+                </a>
+            </div>
+            <div class="card-body">
+                {% if sessions %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th width="20%">
+                                        <i class="bi bi-calendar"></i> Дата
+                                    </th>
+                                    <th width="40%">
+                                        <i class="bi bi-file-earmark-text"></i> Источник
+                                    </th>
+                                    <th width="15%">
+                                        <i class="bi bi-gear"></i> Этап
+                                    </th>
+                                    <th width="10%">
+                                        <i class="bi bi-clock"></i> Длительность
+                                    </th>
+                                    <th width="15%" class="text-end">
+                                        <i class="bi bi-box-arrow-up-right"></i> Действия
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for session in sessions %}
+                                <tr>
+                                    <td>
+                                        <small class="text-muted">
+                                            {{ session.timestamp|format_datetime }}
+                                        </small>
+                                    </td>
+                                    <td>
+                                        <strong>{{ session.video_source|truncate(50) }}</strong>
+                                    </td>
+                                    <td>
+                                        {% if session.stage == 'export_complete' %}
+                                            <span class="badge bg-success">
+                                                <i class="bi bi-check-circle"></i> Завершено
+                                            </span>
+                                        {% elif 'complete' in session.stage %}
+                                            <span class="badge bg-info">
+                                                <i class="bi bi-hourglass-split"></i> В процессе
+                                            </span>
+                                        {% else %}
+                                            <span class="badge bg-warning">
+                                                <i class="bi bi-exclamation-triangle"></i> {{ session.stage }}
+                                            </span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if session.statistics and session.statistics.total_duration_seconds %}
+                                            <span class="timestamp">
+                                                {{ session.statistics.total_duration_seconds|format_time }}
+                                            </span>
+                                        {% else %}
+                                            <span class="text-muted">N/A</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        <a href="/session/{{ session.id }}" class="btn btn-primary btn-sm">
+                                            <i class="bi bi-eye"></i> Просмотр
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="alert alert-info" role="alert">
+                        <i class="bi bi-info-circle"></i>
+                        <strong>Нет обработанных видео</strong><br>
+                        Запустите обработку видео с помощью CLI:
+                        <code class="ms-2">python -m src.cli process-all your_video.mp4</code>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Инструкция -->
+{% if not sessions %}
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-book"></i> Как использовать систему
+            </div>
+            <div class="card-body">
+                <h5>Быстрый старт:</h5>
+                <ol class="mt-3">
+                    <li class="mb-2">
+                        <strong>Транскрибация видео:</strong>
+                        <pre class="mt-2"><code>python -m src.cli transcribe your_video.mp4</code></pre>
+                    </li>
+                    <li class="mb-2">
+                        <strong>Полный пайплайн (рекомендуется):</strong>
+                        <pre class="mt-2"><code>python -m src.cli process-all your_video.mp4 --language ru</code></pre>
+                    </li>
+                    <li class="mb-2">
+                        <strong>Запуск веб-интерфейса:</strong>
+                        <pre class="mt-2"><code>python web_app.py</code></pre>
+                    </li>
+                </ol>
+
+                <h5 class="mt-4">Этапы обработки:</h5>
+                <div class="row mt-3">
+                    <div class="col-md-6">
+                        <ul class="list-unstyled">
+                            <li class="mb-2">
+                                <i class="bi bi-1-circle-fill text-primary"></i> Транскрибация (Whisper)
+                            </li>
+                            <li class="mb-2">
+                                <i class="bi bi-2-circle-fill text-primary"></i> Сегментация (Semantic)
+                            </li>
+                            <li class="mb-2">
+                                <i class="bi bi-3-circle-fill text-primary"></i> Суммаризация (T5)
+                            </li>
+                            <li class="mb-2">
+                                <i class="bi bi-4-circle-fill text-primary"></i> Мета-анализ
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <ul class="list-unstyled">
+                            <li class="mb-2">
+                                <i class="bi bi-5-circle-fill text-primary"></i> Извлечение терминов (SpaCy)
+                            </li>
+                            <li class="mb-2">
+                                <i class="bi bi-6-circle-fill text-primary"></i> Генерация вопросов
+                            </li>
+                            <li class="mb-2">
+                                <i class="bi bi-7-circle-fill text-primary"></i> Поиск статей
+                            </li>
+                            <li class="mb-2">
+                                <i class="bi bi-8-circle-fill text-primary"></i> Экспорт (HTML/PDF)
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

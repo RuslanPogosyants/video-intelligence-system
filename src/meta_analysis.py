@@ -1,10 +1,11 @@
-# src/meta_analysis.py (продолжение)
+# src/meta_analysis.py
 """
 Мета-анализ: финальная суммаризация и ключевые тезисы
+Phase 2: Интеграция LLM и KeyBERT для качественного анализа
 """
 import json
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Optional
 from collections import Counter
 import re
 
@@ -12,8 +13,49 @@ import re
 class MetaAnalyzer:
     """Анализ всего видео и извлечение ключевых инсайтов"""
 
-    def __init__(self):
-        pass
+    def __init__(
+            self,
+            use_llm: bool = False,
+            llm_provider: Optional['LLMProvider'] = None,
+            use_keybert: bool = False
+    ):
+        """
+        Args:
+            use_llm: использовать LLM для overview и key points
+            llm_provider: провайдер LLM (если None, создаётся автоматически)
+            use_keybert: использовать KeyBERT для извлечения ключевых слов
+        """
+        self.use_llm = use_llm
+        self.use_keybert = use_keybert
+
+        # Инициализация LLM
+        if use_llm and llm_provider is None:
+            try:
+                from .llm_provider import LLMProvider, LLMConfig
+                print("[INFO] Initializing LLM provider for meta-analysis")
+                config = LLMConfig()
+                self.llm = LLMProvider(config)
+            except Exception as e:
+                print(f"[WARN] Failed to initialize LLM: {e}")
+                print("[WARN] Falling back to rule-based approach")
+                self.use_llm = False
+                self.llm = None
+        else:
+            self.llm = llm_provider
+
+        # Инициализация KeyBERT
+        if use_keybert:
+            try:
+                from keybert import KeyBERT
+                print("[INFO] Initializing KeyBERT for keyword extraction")
+                self.keybert = KeyBERT()
+            except Exception as e:
+                print(f"[WARN] Failed to initialize KeyBERT: {e}")
+                print("[WARN] Falling back to TF-IDF approach")
+                self.use_keybert = False
+                self.keybert = None
+        else:
+            self.keybert = None
 
     def extract_key_sentences(
             self,
@@ -62,15 +104,78 @@ class MetaAnalyzer:
 
         return top_sentences
 
-    def extract_topics(self, text: str, num_topics: int = 5) -> List[str]:
+    def extract_topics_keybert(self, text: str, num_topics: int = 5) -> List[str]:
         """
-        Извлечение основных тем через частотный анализ
+        Извлечение основных тем через KeyBERT (Phase 2)
         """
-        # Стоп-слова для русского языка
+        try:
+            # Извлечение ключевых слов
+            keywords = self.keybert.extract_keywords(
+                text,
+                keyphrase_ngram_range=(1, 2),  # Uni/bigrams
+                stop_words='russian',
+                top_n=num_topics * 2,  # Берём больше для фильтрации
+                diversity=0.7  # Разнообразие ключевых слов
+            )
+
+            # Фильтруем и возвращаем топ-N
+            topics = [keyword for keyword, _ in keywords]
+            return topics[:num_topics]
+
+        except Exception as e:
+            print(f"[WARN] KeyBERT extraction failed: {e}, falling back to TF-IDF")
+            return self.extract_topics_tfidf(text, num_topics)
+
+    def extract_topics_tfidf(self, text: str, num_topics: int = 5) -> List[str]:
+        """
+        Извлечение основных тем через TF-IDF (fallback)
+        """
+        # Расширенный список стоп-слов для русского языка
         stop_words = {
-            'это', 'как', 'так', 'и', 'в', 'на', 'с', 'для', 'по', 'от',
-            'что', 'все', 'был', 'быть', 'к', 'а', 'то', 'за', 'из', 'или',
-            'у', 'о', 'же', 'не', 'мы', 'вы', 'они', 'он', 'она', 'оно'
+            # Местоимения
+            'я', 'ты', 'он', 'она', 'оно', 'мы', 'вы', 'они',
+            'его', 'её', 'их', 'мой', 'твой', 'свой', 'наш', 'ваш',
+            'этот', 'тот', 'такой', 'этого', 'того', 'этом', 'том',
+            'кто', 'что', 'какой', 'который', 'чей', 'сколько',
+
+            # Предлоги
+            'в', 'на', 'с', 'к', 'по', 'за', 'из', 'от', 'у', 'о', 'об',
+            'про', 'для', 'без', 'до', 'при', 'через', 'над', 'под', 'между',
+
+            # Союзы
+            'и', 'а', 'но', 'или', 'да', 'что', 'чтобы', 'если', 'когда',
+            'как', 'так', 'потому', 'поэтому', 'также', 'тоже', 'либо',
+
+            # Частицы
+            'не', 'ни', 'бы', 'ли', 'же', 'ведь', 'вот', 'вон', 'даже',
+            'уже', 'еще', 'ещё', 'только', 'лишь', 'просто',
+
+            # Глаголы-связки и вспомогательные
+            'быть', 'был', 'была', 'было', 'были', 'есть', 'будет', 'будут',
+            'стать', 'стал', 'стала', 'стало', 'стали',
+
+            # Общие слова
+            'это', 'все', 'весь', 'всё', 'сам', 'самый', 'самого', 'самое',
+            'другой', 'другого', 'другое', 'один', 'одного', 'одно',
+            'два', 'три', 'несколько', 'много', 'мало', 'такое', 'такого',
+
+            # Слова-паразиты из разговорной речи
+            'ну', 'вот', 'как-то', 'типа', 'короче', 'значит', 'понимаете',
+            'знаете', 'смотрите', 'слушайте', 'скажем', 'допустим',
+            'собственно', 'фактически', 'практически', 'буквально',
+
+            # Указательные и вопросительные
+            'где', 'куда', 'откуда', 'когда', 'почему', 'зачем', 'сколько',
+            'здесь', 'там', 'тут', 'туда', 'сюда', 'тогда', 'теперь', 'сейчас',
+
+            # Дополнительные частые слова без смысловой нагрузки
+            'может', 'можно', 'нужно', 'надо', 'должен', 'должно', 'должны',
+            'хочу', 'хотел', 'могу', 'мог', 'говорить', 'сказать',
+            'делать', 'сделать', 'давать', 'дать', 'иметь',
+
+            # Слова из вашего примера
+            'какой', 'этого', 'если', 'друг', 'человек', 'любой', 'просто',
+            'достаточно', 'какие', 'более', 'менее', 'очень', 'совсем'
         }
 
         # Токенизация и очистка
@@ -79,9 +184,26 @@ class MetaAnalyzer:
 
         # Подсчёт частоты
         word_counts = Counter(words)
-        topics = [word for word, _ in word_counts.most_common(num_topics)]
 
-        return topics
+        # Фильтруем слова с частотой меньше 2 (слишком редкие)
+        filtered_counts = {word: count for word, count in word_counts.items() if count >= 2}
+
+        # Берём топ-N наиболее частых
+        topics = [word for word, _ in Counter(filtered_counts).most_common(num_topics * 3)]
+
+        # Дополнительная фильтрация: убираем слова короче 5 букв (они часто бессмысленны)
+        topics = [word for word in topics if len(word) >= 5]
+
+        return topics[:num_topics]
+
+    def extract_topics(self, text: str, num_topics: int = 5) -> List[str]:
+        """
+        Извлечение основных тем (выбирает метод автоматически)
+        """
+        if self.use_keybert and self.keybert is not None:
+            return self.extract_topics_keybert(text, num_topics)
+        else:
+            return self.extract_topics_tfidf(text, num_topics)
 
     def create_structured_summary(
             self,
@@ -89,18 +211,37 @@ class MetaAnalyzer:
     ) -> Dict:
         """
         Создание структурированной финальной суммаризации
+        Phase 2: Использует LLM для качественного overview и key points
         """
         print("[INFO] Creating structured summary")
 
-        meta_summary = summaries_data["meta_summary"]
-        key_points = summaries_data["key_points"]
         segments = summaries_data["segments"]
+
+        # Собираем суммаризации сегментов
+        segment_summaries = [seg["summary"] for seg in segments]
+
+        # Генерация overview и key points
+        if self.use_llm and self.llm is not None:
+            print("[INFO] Using LLM for overview and key points extraction")
+            try:
+                # Используем LLM для качественного анализа
+                meta_summary = self.llm.generate_overview(segment_summaries)
+                key_points = self.llm.extract_key_points(segment_summaries, num_points=5)
+            except Exception as e:
+                print(f"[WARN] LLM generation failed: {e}, using fallback")
+                # Fallback к старым данным
+                meta_summary = summaries_data.get("meta_summary", "")
+                key_points = summaries_data.get("key_points", [])
+        else:
+            # Используем старые данные из T5 суммаризации
+            meta_summary = summaries_data.get("meta_summary", "")
+            key_points = summaries_data.get("key_points", [])
 
         # Извлекаем ключевые предложения
         key_sentences = self.extract_key_sentences(segments)
 
-        # Анализ тематики (простой подсчёт частых слов)
-        all_text = " ".join([seg["summary"] for seg in segments])
+        # Анализ тематики (KeyBERT или TF-IDF)
+        all_text = " ".join(segment_summaries)
         topics = self.extract_topics(all_text)
 
         # Статистика

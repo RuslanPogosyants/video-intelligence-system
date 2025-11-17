@@ -67,6 +67,55 @@ class SegmentSummarizer:
         # Перевод модели в режим eval
         self.model.eval()
 
+    @staticmethod
+    def preprocess_text(text: str) -> str:
+        """
+        Предобработка текста: очистка от мусора в разговорной речи
+
+        Args:
+            text: исходный текст из транскрипции
+
+        Returns:
+            Очищенный текст
+        """
+        import re
+
+        # 1. Удаление звуков-заполнителей (filler sounds)
+        filler_patterns = [
+            r'\b(?:ммм|эээ|ааа|эмм|хмм|угу|ага)\b',  # Основные звуки
+            r'\b(?:ну|вот|как бы|типа|короче|значит)\b',  # Слова-паразиты (частые)
+            r'\b(?:понимаете|знаете|смотрите|слушайте)\b',  # Обращения без смысла
+        ]
+
+        for pattern in filler_patterns:
+            text = re.sub(pattern, ' ', text, flags=re.IGNORECASE)
+
+        # 2. Удаление повторяющихся слов (это это это -> это)
+        text = re.sub(r'\b(\w+)( \1\b)+', r'\1', text)
+
+        # 3. Удаление множественных знаков препинания (...... -> .)
+        text = re.sub(r'\.{2,}', '.', text)
+        text = re.sub(r',{2,}', ',', text)
+        text = re.sub(r'\?{2,}', '?', text)
+        text = re.sub(r'!{2,}', '!', text)
+
+        # 4. Удаление неполных предложений (заканчивающихся на "...", но оставляем если это середина)
+        text = re.sub(r'\.{3,}\s*$', '.', text)
+
+        # 5. Очистка множественных пробелов
+        text = re.sub(r'\s+', ' ', text)
+
+        # 6. Удаление пробелов перед знаками препинания
+        text = re.sub(r'\s+([.,!?;:])', r'\1', text)
+
+        # 7. Добавление пробела после знаков препинания (если его нет)
+        text = re.sub(r'([.,!?;:])(\w)', r'\1 \2', text)
+
+        # 8. Удаление пробелов в начале и конце
+        text = text.strip()
+
+        return text
+
     def summarize_text(
             self,
             text: str,
@@ -135,24 +184,34 @@ class SegmentSummarizer:
 
         for segment in iterator:
             text = segment["text"]
+            summary = ""  # ВАЖНО: инициализация по умолчанию
+
+            # Предобработка текста (очистка от мусора)
+            try:
+                text_cleaned = self.preprocess_text(text)
+            except Exception as e:
+                print(f"[WARN] Error preprocessing segment {segment.get('id', '?')}: {e}")
+                text_cleaned = text  # Fallback на оригинал
 
             # Пропускаем слишком короткие тексты
-            if len(text) < min_text_length:
-                summary = text  # Используем исходный текст
-                print(f"[WARN] Segment {segment['id']} too short, skipping summarization")
+            if len(text_cleaned) < min_text_length:
+                summary = text_cleaned if text_cleaned else text
+                if show_progress:
+                    print(f"[WARN] Segment {segment.get('id', '?')} too short ({len(text_cleaned)} chars), skipping summarization")
             else:
                 try:
-                    summary = self.summarize_text(text)
+                    summary = self.summarize_text(text_cleaned)
                 except Exception as e:
-                    print(f"[✗] Error summarizing segment {segment['id']}: {e}")
-                    summary = text[:200] + "..."  # Fallback: первые 200 символов
+                    print(f"[✗] Error summarizing segment {segment.get('id', '?')}: {e}")
+                    # Fallback: первые 200 символов или весь текст
+                    summary = text_cleaned[:200] + "..." if len(text_cleaned) > 200 else text_cleaned
 
             # Добавляем суммаризацию к сегменту
             segment_with_summary = segment.copy()
             segment_with_summary["summary"] = summary
             segment_with_summary["original_length"] = len(text)
             segment_with_summary["summary_length"] = len(summary)
-            segment_with_summary["compression_ratio"] = len(text) / len(summary) if summary else 0
+            segment_with_summary["compression_ratio"] = len(text) / len(summary) if summary and len(summary) > 0 else 1.0
 
             summarized_segments.append(segment_with_summary)
 
