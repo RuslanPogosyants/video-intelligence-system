@@ -327,14 +327,15 @@ def run_processing(file_path: str, task_id: str, options: Dict):
         env = os.environ.copy()
         env['PYTHONUNBUFFERED'] = '1'
 
-        # Запускаем процесс
+        # Запускаем процесс с UTF-8 кодировкой
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
             bufsize=1,
-            universal_newlines=True,
+            encoding='utf-8',
+            errors='replace',  # Заменяем неправильные символы
             env=env
         )
 
@@ -358,32 +359,32 @@ def run_processing(file_path: str, task_id: str, options: Dict):
                 if 'error' in line_stripped.lower() or 'exception' in line_stripped.lower():
                     error_lines.append(line_stripped)
 
-                # Обновляем статус на основе вывода
-                if 'Транскрибация' in line:
+                # Обновляем статус на основе вывода (с учетом номеров этапов и английских названий)
+                if '[1/8]' in line or 'Транскрибация' in line or 'Transcription' in line or 'Transcribing' in line:
                     processing_tasks[task_id]['stage'] = 'Транскрибация...'
                     processing_tasks[task_id]['progress'] = 20
-                elif 'Сегментация' in line:
+                elif '[2/8]' in line or 'Сегментация' in line or 'Segmentation' in line or 'Segmenting' in line:
                     processing_tasks[task_id]['stage'] = 'Сегментация...'
                     processing_tasks[task_id]['progress'] = 35
-                elif 'Суммаризация' in line or 'Summarizing' in line:
+                elif '[3/8]' in line or 'Суммаризация' in line or 'Summarizing' in line or 'Summarization' in line:
                     processing_tasks[task_id]['stage'] = 'Суммаризация...'
                     processing_tasks[task_id]['progress'] = 50
-                elif 'Мета-анализ' in line:
+                elif '[4/8]' in line or 'Мета-анализ' in line or 'Meta-analysis' in line:
                     processing_tasks[task_id]['stage'] = 'Мета-анализ...'
                     processing_tasks[task_id]['progress'] = 65
-                elif 'Извлечение терминов' in line:
+                elif '[5/8]' in line or 'Извлечение терминов' in line or 'Term extraction' in line or 'Extracting terms' in line:
                     processing_tasks[task_id]['stage'] = 'Извлечение терминов...'
                     processing_tasks[task_id]['progress'] = 75
-                elif 'Генерация вопросов' in line:
+                elif '[6/8]' in line or 'Генерация вопросов' in line or 'Generating questions' in line or 'Question generation' in line:
                     processing_tasks[task_id]['stage'] = 'Генерация вопросов...'
                     processing_tasks[task_id]['progress'] = 85
-                elif 'Поиск статей' in line:
+                elif '[7/8]' in line or 'Поиск статей' in line or 'Searching articles' in line or 'Article search' in line:
                     processing_tasks[task_id]['stage'] = 'Поиск статей...'
                     processing_tasks[task_id]['progress'] = 90
-                elif 'Экспорт' in line:
+                elif '[8/8]' in line or 'Экспорт' in line or 'Export' in line or 'Exporting' in line:
                     processing_tasks[task_id]['stage'] = 'Экспорт отчёта...'
                     processing_tasks[task_id]['progress'] = 95
-                elif 'ЗАВЕРШЁН' in line or 'SUCCESS' in line:
+                elif 'ЗАВЕРШЁН' in line or 'SUCCESS' in line or 'Complete!' in line or 'Finished' in line:
                     processing_tasks[task_id]['stage'] = 'Завершено!'
                     processing_tasks[task_id]['progress'] = 100
 
